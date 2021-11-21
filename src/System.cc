@@ -152,6 +152,17 @@ System::System(const string &strVocFile,                //词袋文件所在路�
     mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR); // mSensor!=MONOCULAR);
     mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
+    if(mSensor==STEREO || mSensor==IMU_STEREO || mSensor==RGBD)
+    {
+        // for point cloud resolution
+        float resolution = fsSettings["PointCloudMapping.Resolution"];
+        float meank = fsSettings["meank"];
+        float thresh = fsSettings["thresh"];
+
+        mpPointCloudMapping = new PointCloudMapping(resolution, meank, thresh);
+        mpLocalMapper->SetPointCloudMapper(mpPointCloudMapping);
+        mpLoopCloser->SetPointCloudMapper(mpPointCloudMapping);
+    }
     //Initialize the Viewer thread and launch
     // 创建并开启显示线程
     if(bUseViewer)

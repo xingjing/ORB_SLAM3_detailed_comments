@@ -183,6 +183,8 @@ public:
     vector<int> vnKeyFramesLM;
     vector<int> vnMapPointsLM;
 
+    cv::Mat mimLeft, mimRight;
+    cv::Mat mImDepth;
 protected:
 
     // Main tracking function. It is independent of the input sensor.

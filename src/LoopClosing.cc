@@ -2190,7 +2190,7 @@ void LoopClosing::MergeLocal()
         mbFinishedGBA = false;
         mbStopGBA = false;
         // 重新执行全局BA
-        mpThreadGBA = new thread(&LoopClosing::RunGlobalBundleAdjustment,this, pMergeMap, mpCurrentKF->mnId);
+        mpThreadGBA = new thread(&LoopClosing::RunGlobalBundleAdjustment, this, pMergeMap, mpCurrentKF->mnId);
     }
 
     // 添加融合边(这里不是参与优化的边,只是记录)
@@ -2587,7 +2587,7 @@ void LoopClosing::ResetIfRequested()
 void LoopClosing::RunGlobalBundleAdjustment(Map* pActiveMap, unsigned long nLoopKF)
 {
     Verbose::PrintMess("Starting Global Bundle Adjustment", Verbose::VERBOSITY_NORMAL);
-
+    mpPointCloudMapping->loopbusy = true;
     const bool bImuInit = pActiveMap->isImuInitialized();
 
 #ifdef REGISTER_TIMES
@@ -2817,6 +2817,13 @@ void LoopClosing::RunGlobalBundleAdjustment(Map* pActiveMap, unsigned long nLoop
             mpLocalMapper->Release();
 
             Verbose::PrintMess("Map updated!", Verbose::VERBOSITY_NORMAL);
+            loopcount++;
+
+            mpPointCloudMapping->mabIsUpdating = false;  // 强制让已有的更新停止，进行新的
+            mpThreadDML = new thread(&PointCloudMapping::updatecloud, mpPointCloudMapping, std::ref(*pActiveMap));
+                // mpPointCloudMapping->updatecloud(*pActiveMap);
+            cout<<"mpPointCloudMapping->loopcount="<<mpPointCloudMapping->mnloopcount<<endl;
+            cout << "Map updated!" << endl;
         }
 
         mbFinishedGBA = true;
