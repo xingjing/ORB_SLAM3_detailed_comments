@@ -153,18 +153,18 @@ void PointCloudMapping::viewer()
             }
 
         }
-        timeval start, finish; //定义开始，结束变量
+        // timeval start, finish; //定义开始，结束变量
         //初始化
-        cout<<"待处理点云个数 = "<<N<<endl;
+        // cout<<"待处理点云个数 = "<<N<<endl;
         double generatePointCloudTime = 0, transformPointCloudTime = 0; 
         for (auto pKF : lNewKeyFrames)
         {
-            gettimeofday(&start,NULL);
+            // gettimeofday(&start,NULL);
             generatePointCloud(pKF);
-            gettimeofday(&finish,NULL);//初始化结束时间
-            generatePointCloudTime += finish.tv_sec - start.tv_sec + (finish.tv_usec - start.tv_usec)/1000000.0;
+            // gettimeofday(&finish,NULL);//初始化结束时间
+            // generatePointCloudTime += finish.tv_sec - start.tv_sec + (finish.tv_usec - start.tv_usec)/1000000.0;
 
-            gettimeofday(&start,NULL);
+            // gettimeofday(&start,NULL);
             pcl::PointCloud<pcl::PointXYZRGBA>::Ptr p(new pcl::PointCloud<pcl::PointXYZRGBA>);
             pcl::transformPointCloud(*(pKF->mptrPointCloud), *(p), Converter::toMatrix4d(pKF->GetPoseInverse()));
 
@@ -172,30 +172,36 @@ void PointCloudMapping::viewer()
                 std::unique_lock<std::mutex> lck(mMutexGlobalMap);
                 *globalMap += *p;
             }
-            gettimeofday(&finish,NULL);//初始化结束时间
-            transformPointCloudTime += finish.tv_sec - start.tv_sec + (finish.tv_usec - start.tv_usec)/1000000.0;
+            // gettimeofday(&finish,NULL);//初始化结束时间
+            // transformPointCloudTime += finish.tv_sec - start.tv_sec + (finish.tv_usec - start.tv_usec)/1000000.0;
         }
-        gettimeofday(&start,NULL);
+        // gettimeofday(&start,NULL);
         pcl::PointCloud<pcl::PointXYZRGBA>::Ptr tmp(new pcl::PointCloud<pcl::PointXYZRGBA>);
-        // statistical_filter->setInputCloud(globalMap);
+
+        // 去除孤立点这个比较耗时，用处也不是很大，可以去掉
+        // statistical_filter->setInputCloud(globalMap);  
         // statistical_filter->filter(*tmp);
+
         voxel->setInputCloud(globalMap);
         voxel->filter(*globalMap);
-        gettimeofday(&finish,NULL);//初始化结束时间
-        double filter = finish.tv_sec - start.tv_sec + (finish.tv_usec - start.tv_usec)/1000000.0;//转换浮点型
-        std::cout<<"filter: "<<filter<<std::endl;
+        // gettimeofday(&finish,NULL);//初始化结束时间
+        // double filter = finish.tv_sec - start.tv_sec + (finish.tv_usec - start.tv_usec)/1000000.0;//转换浮点型
+        // std::cout<<"filter: "<<filter<<std::endl;
 
-        std::cout<<"generatePointCloudTime: "<<generatePointCloudTime<<std::endl;
-        std::cout<<"transformPointCloudTime: "<<transformPointCloudTime<<std::endl;
-        gettimeofday(&start,NULL);
-        viewer.showCloud(globalMap);
-        gettimeofday(&finish,NULL);//初始化结束时间
-        double duration = finish.tv_sec - start.tv_sec + (finish.tv_usec - start.tv_usec)/1000000.0;//转换浮点型
-        std::cout<<"showCloud: "<<duration<<std::endl;
+        // std::cout<<"generatePointCloudTime: "<<generatePointCloudTime<<std::endl;
+        // std::cout<<"transformPointCloudTime: "<<transformPointCloudTime<<std::endl;
+        // gettimeofday(&start,NULL);
+        viewer.showCloud(globalMap);  // 这个比较费时，建议不需要实时显示的可以屏蔽或改成几次显示一次
+        // gettimeofday(&finish,NULL);//初始化结束时间
+        // double duration = finish.tv_sec - start.tv_sec + (finish.tv_usec - start.tv_usec)/1000000.0;//转换浮点型
+        // std::cout<<"showCloud: "<<duration<<std::endl;
     }
 }
+
+// 保存地图的函数，需要的自行调用~
 void PointCloudMapping::save()
 {
+    std::unique_lock<std::mutex> lck(mMutexGlobalMap);
     pcl::io::savePCDFile("result.pcd", *globalMap);
     cout << "globalMap save finished" << endl;
 }
