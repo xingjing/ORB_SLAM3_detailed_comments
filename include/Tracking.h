@@ -93,6 +93,11 @@ public:
         return mpLastKeyFrame;
     }
 
+    void SetPointCloudMapper(PointCloudMapping* pPointCloudMapping)
+    {
+        mpPointCloudMapping = pPointCloudMapping;
+    }
+
     void CreateMapInAtlas();
     std::mutex mMutexTracks;
 
@@ -253,7 +258,7 @@ protected:
     //Other Thread Pointers
     LocalMapping* mpLocalMapper;
     LoopClosing* mpLoopClosing;
-
+    PointCloudMapping* mpPointCloudMapping;
     //ORB
     ORBextractor* mpORBextractorLeft, *mpORBextractorRight;
     ORBextractor* mpIniORBextractor;

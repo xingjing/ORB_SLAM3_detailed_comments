@@ -162,6 +162,7 @@ System::System(const string &strVocFile,                //词袋文件所在路�
         mpPointCloudMapping = new PointCloudMapping(resolution, meank, thresh);
         mpLocalMapper->SetPointCloudMapper(mpPointCloudMapping);
         mpLoopCloser->SetPointCloudMapper(mpPointCloudMapping);
+        mpTracker->SetPointCloudMapper(mpPointCloudMapping);
     }
     //Initialize the Viewer thread and launch
     // 创建并开启显示线程
