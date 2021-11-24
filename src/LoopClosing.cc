@@ -1527,6 +1527,10 @@ void LoopClosing::CorrectLoop()
 
     mpAtlas->InformNewBigChange();
 
+    mpPointCloudMapping->mabIsUpdating = false;  // 强制让已有的更新停止，进行新的
+    mpThreadDML = new thread(&PointCloudMapping::updatecloud, mpPointCloudMapping, std::ref(*mpCurrentKF->GetMap()));
+    mpThreadDML->detach();
+    cout << "Map updated!" << endl;
     // Add loop edge
     // Step 7：添加当前帧与闭环匹配帧之间的边（这个连接关系不优化）
     // !这两句话应该放在OptimizeEssentialGraph之前，因为OptimizeEssentialGraph的步骤4.2中有优化
@@ -1534,7 +1538,7 @@ void LoopClosing::CorrectLoop()
     mpCurrentKF->AddLoopEdge(mpLoopMatchedKF);
 
     // Launch a new thread to perform Global Bundle Adjustment (Only if few keyframes, if not it would take too much time)
-    // 闭环地图没有imu初始化或者 仅有一个地图且内部关键帧<200时才执行全局BA，否则太慢
+    // 闭环地图没有imu初始化或者 仅有一个地图且内部关键帧<200时才执行全局BA，否则太慢，想建图好点还是推荐执行一下的~
     if(!pLoopMap->isImuInitialized() || (pLoopMap->KeyFramesInMap()<200 && mpAtlas->CountMaps()==1))
     {
 	    // Step 8：新建一个线程用于全局BA优化
@@ -1543,10 +1547,9 @@ void LoopClosing::CorrectLoop()
         mbRunningGBA = true;
         mbFinishedGBA = false;
         mbStopGBA = false;
-
         mpThreadGBA = new thread(&LoopClosing::RunGlobalBundleAdjustment, this, pLoopMap, mpCurrentKF->mnId);
     }
-
+    
     // Loop closed. Release Local Mapping.
     mpLocalMapper->Release();    
 
@@ -2183,7 +2186,11 @@ void LoopClosing::MergeLocal()
             }
         }
     }
-
+    
+    mpPointCloudMapping->mabIsUpdating = false;  // 强制让已有的更新停止，进行新的
+    mpThreadDML = new thread(&PointCloudMapping::updatecloud, mpPointCloudMapping, std::ref(*pMergeMap));
+    mpThreadDML->detach();
+    cout << "Map updated!" << endl;
 
     //Essential graph 优化后可以重新开始局部建图了
     mpLocalMapper->Release();
@@ -2203,7 +2210,7 @@ void LoopClosing::MergeLocal()
         // 执行全局BA
         mpThreadGBA = new thread(&LoopClosing::RunGlobalBundleAdjustment,this, pMergeMap, mpCurrentKF->mnId);
     }
-
+    std::cout<<"merge local"<<std::endl;
     // 添加融合边(这里不是参与优化的边,只是记录)
     mpMergeMatchedKF->AddMergeEdge(mpCurrentKF);
     mpCurrentKF->AddMergeEdge(mpMergeMatchedKF);
@@ -2606,7 +2613,6 @@ void LoopClosing::ResetIfRequested()
 void LoopClosing::RunGlobalBundleAdjustment(Map* pActiveMap, unsigned long nLoopKF)
 {
     Verbose::PrintMess("Starting Global Bundle Adjustment", Verbose::VERBOSITY_NORMAL);
-    mpPointCloudMapping->loopbusy = true;
     const bool bImuInit = pActiveMap->isImuInitialized();
 
 #ifdef REGISTER_TIMES
@@ -2836,12 +2842,10 @@ void LoopClosing::RunGlobalBundleAdjustment(Map* pActiveMap, unsigned long nLoop
             mpLocalMapper->Release();
 
             Verbose::PrintMess("Map updated!", Verbose::VERBOSITY_NORMAL);
-            loopcount++;
-
+ 
             mpPointCloudMapping->mabIsUpdating = false;  // 强制让已有的更新停止，进行新的
             mpThreadDML = new thread(&PointCloudMapping::updatecloud, mpPointCloudMapping, std::ref(*pActiveMap));
-                // mpPointCloudMapping->updatecloud(*pActiveMap);
-            cout<<"mpPointCloudMapping->loopcount="<<mpPointCloudMapping->mnloopcount<<endl;
+            mpThreadDML->detach();
             cout << "Map updated!" << endl;
         }
 

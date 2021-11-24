@@ -1863,7 +1863,9 @@ void Tracking::Track()
                     mpSystem->ResetActiveMap();
                 }
             }
-            // 不跟踪直接返回
+            // // 不跟踪直接返回
+            // 老白修改~这块直接返回不太好，新开个地图比较好，不然运行rgbd_dataset_freiburg2_pioneer_slam3容易出现鬼畜
+            CreateMapInAtlas();
             return;
         }
     }
@@ -2966,6 +2968,11 @@ void Tracking::CreateMapInAtlas()
     mCurrentFrame = Frame();
     mvIniMatches.clear();
 
+    if(mSensor==System::STEREO || mSensor==System::IMU_STEREO || mSensor==System::RGBD)
+    {
+        if (mpPointCloudMapping)
+            mpPointCloudMapping->Clear();
+    }
     mbCreatedMap = true;
 
 }

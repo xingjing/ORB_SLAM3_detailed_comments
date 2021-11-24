@@ -96,7 +96,12 @@ public:
     {
         return mpLastKeyFrame;
     }
-    // 新建地图
+
+    void SetPointCloudMapper(PointCloudMapping* pPointCloudMapping)
+    {
+        mpPointCloudMapping = pPointCloudMapping;
+    }
+
     void CreateMapInAtlas();
     std::mutex mMutexTracks;
 
@@ -263,8 +268,8 @@ protected:
     // 其他线程的指针
     LocalMapping* mpLocalMapper;
     LoopClosing* mpLoopClosing;
-
-    //ORB特征提取器
+    PointCloudMapping* mpPointCloudMapping;
+    //ORB
     ORBextractor* mpORBextractorLeft, *mpORBextractorRight;
     ORBextractor* mpIniORBextractor;
 

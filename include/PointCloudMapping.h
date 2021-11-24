@@ -67,7 +67,7 @@ protected:
     shared_ptr<thread> viewerThread;
 
     bool shutDownFlag = false;
-    mutex shutDownMutex;
+    std::mutex shutDownMutex;
 
     condition_variable keyFrameUpdated;
     std::mutex mMutexGlobalMap;
@@ -79,7 +79,8 @@ protected:
     vector<cv::Mat> colorImgks;
     vector<cv::Mat> depthImgks;
     vector<int> ids;
-    mutex keyframeMutex;
+    std::mutex keyframeMutex;
+    std::mutex updateMutex;
     uint16_t lastKeyframeSize = 0;
 
     double resolution = 0.04;
