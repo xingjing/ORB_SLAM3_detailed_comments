@@ -47,8 +47,11 @@ namespace ORB_SLAM3 {
         template<class Archive>
         void serialize(Archive& ar, const unsigned int version)
         {
+            // 指定当前对象的ID
             ar & mnId;
+            // 说明成像模型的类型
             ar & mnType;
+            // 存放成像模型参数的vector
             ar & mvParameters;
         }
 

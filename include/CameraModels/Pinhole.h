@@ -38,8 +38,10 @@ namespace ORB_SLAM3 {
 
     public:
         Pinhole() {
+            // 指定相机参数长度为4
             mvParameters.resize(4);
             mnId=nNextId++;
+            // 指定成像类型为pinhole
             mnType = CAM_PINHOLE;
         }
         Pinhole(const std::vector<float> _vParameters) : GeometricCamera(_vParameters), tvr(nullptr) {

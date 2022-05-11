@@ -40,8 +40,10 @@ namespace ORB_SLAM3 {
 
     public:
         KannalaBrandt8() : precision(1e-6) {
+            // 指定相机参数长度为8
             mvParameters.resize(8);
             mnId=nNextId++;
+            // 指定成像类型为fisheye
             mnType = CAM_FISHEYE;
         }
         KannalaBrandt8(const std::vector<float> _vParameters) : GeometricCamera(_vParameters), precision(1e-6), mvLappingArea(2,0) ,tvr(nullptr) {

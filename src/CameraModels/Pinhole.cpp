@@ -26,6 +26,7 @@ namespace ORB_SLAM3
 {
 // BOOST_CLASS_EXPORT_GUID(Pinhole, "Pinhole")
 
+// nNextID定义并赋初值
 long unsigned int GeometricCamera::nNextId = 0;
 
 /** 
@@ -215,6 +216,7 @@ bool Pinhole::epipolarConstrain(
     return dsqr < 3.84 * unc;
 }
 
+// 重载<<与>>运算符，可以方便的将相机参数输出、输入
 std::ostream &operator<<(std::ostream &os, const Pinhole &ph)
 {
     os << ph.mvParameters[0] << " " << ph.mvParameters[1] << " " << ph.mvParameters[2] << " " << ph.mvParameters[3];

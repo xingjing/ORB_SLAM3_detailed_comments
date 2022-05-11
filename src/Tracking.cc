@@ -956,6 +956,9 @@ bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
             mK_(1,2) = cy;
         }
 
+        // 需要有右目相机的情况
+        // ?? 为何有IMU_RGBD但没有RGBD？IMU_RGBD应该也没有Camera2的参数
+        // ?? 并且pinhole中未见到对应内容，可能是pinhole相机默认双目RGBD为已校正已对齐状态，fisheye中则作为两个独立相机进行处理
         if(mSensor==System::STEREO || mSensor==System::IMU_STEREO || mSensor==System::IMU_RGBD){
             // Right camera
             // Camera calibration parameters
