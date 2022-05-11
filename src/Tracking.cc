@@ -652,7 +652,9 @@ void Tracking::newParameterLoader(Settings *settings) {
 }
 
 /**
- * @brief 根据文件读取相机参数，可快速略过不看
+ * @brief 根据文件读取相机参数
+ *  对于Pinhole相机模型，无论真实传感器是否为单目或者双目，在ORB-SLAM3中只创建一个相机模型对象mpCamera
+ * 对于KannalaBrandt8相机模型，如果传感器是单目，就只创建一个相机模型mpCamera，如果是双目，则创建mpCamera、mpCamera2两个对象
  * @param fSettings 配置文件
  */
 bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
@@ -713,6 +715,7 @@ bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
         }
 
         // Distortion parameters
+        // 畸变参数赋给mDistCoef
         node = fSettings["Camera.k1"];
         if(!node.empty() && node.isReal())
         {
@@ -783,11 +786,12 @@ bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
             cx = cx * mImageScale;
             cy = cy * mImageScale;
         }
-
+        // 构造临时vector变量vCamCalib用于存放相机内参
         vector<float> vCamCalib{fx,fy,cx,cy};
 
+        // 利用传入的内参新建一个Pinhole相机模型对象并将其赋给Tracking的成员变量mpCamera
         mpCamera = new Pinhole(vCamCalib);
-
+        // 将其添加到地图集mpAtlas中
         mpCamera = mpAtlas->AddCamera(mpCamera);
 
         std::cout << "- Camera: Pinhole" << std::endl;
@@ -929,6 +933,8 @@ bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
                 cy = cy * mImageScale;
             }
 
+            // 相机内参(fx，fy，cx，cy)和畸变参数(k1，k2，k3，k4)共8个参数放到临时vector变量vCamCalib中
+            // 与pinhole有所区别
             vector<float> vCamCalib{fx,fy,cx,cy,k1,k2,k3,k4};
             mpCamera = new KannalaBrandt8(vCamCalib);
             mpCamera = mpAtlas->AddCamera(mpCamera);
@@ -956,9 +962,14 @@ bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
             mK_(1,2) = cy;
         }
 
-        // 需要有右目相机的情况
-        // ?? 为何有IMU_RGBD但没有RGBD？IMU_RGBD应该也没有Camera2的参数
+        // 如果是KannalaBrandt8成像模型，并且传感器包含双目相机，那么就再添加一个右相机模型对象
+        // 之前添加的那个mpCamera就被当作是左相机模型对象
+        // ?? 为何有IMU_RGBD？IMU_RGBD应该也没有Camera2的参数，怀疑BUG
         // ?? 并且pinhole中未见到对应内容，可能是pinhole相机默认双目RGBD为已校正已对齐状态，fisheye中则作为两个独立相机进行处理
+        /*在向地图中添加相机模型时，对于KannalaBrandt8相机模型而言，无论是单目还是双目，都会添加两个相机模型。
+        其区别在于，如果是单目的话，mpCamera不为空，而mpCamera2为空(因为没有执行如下初始化代码)；
+        如果是双目，mpCamera和mpCamera2两个都不为空。
+        因为mpCamera2这个变量在Tracking的构造函数中被赋初值为空指针 */
         if(mSensor==System::STEREO || mSensor==System::IMU_STEREO || mSensor==System::IMU_RGBD){
             // Right camera
             // Camera calibration parameters
@@ -1049,7 +1060,8 @@ bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
                 b_miss_params = true;
             }
 
-
+            // 读取配置文件中的lapping相关属性
+            // 如果没有读取，这些变量默认值都是-1
             int leftLappingBegin = -1;
             int leftLappingEnd = -1;
 
@@ -1126,17 +1138,20 @@ bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
                     rightLappingEnd = rightLappingEnd * mImageScale;
                 }
 
+                // 将刚刚读取的四个lapping相关变量赋给mvLappingArea
                 static_cast<KannalaBrandt8*>(mpCamera)->mvLappingArea[0] = leftLappingBegin;
                 static_cast<KannalaBrandt8*>(mpCamera)->mvLappingArea[1] = leftLappingEnd;
 
                 mpFrameDrawer->both = true;
 
+                // 再新建一个相机模型，并将其赋给Tracking的成员变量mpCamera2
                 vector<float> vCamCalib2{fx,fy,cx,cy,k1,k2,k3,k4};
                 mpCamera2 = new KannalaBrandt8(vCamCalib2);
                 mpCamera2 = mpAtlas->AddCamera(mpCamera2);
 
                 mTlr = Converter::toSophus(cvTlr);
 
+                // 将刚刚读取的四个lapping相关变量赋给mvLappingArea
                 static_cast<KannalaBrandt8*>(mpCamera2)->mvLappingArea[0] = rightLappingBegin;
                 static_cast<KannalaBrandt8*>(mpCamera2)->mvLappingArea[1] = rightLappingEnd;
 
@@ -1171,6 +1186,7 @@ bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
         std::cerr << "*Not Supported Camera Sensor*" << std::endl;
         std::cerr << "Check an example configuration file with the desired sensor" << std::endl;
     }
+
 
     if(mSensor==System::STEREO || mSensor==System::RGBD || mSensor==System::IMU_STEREO || mSensor==System::IMU_RGBD )
     {
@@ -1212,6 +1228,7 @@ bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
 
     if(mSensor==System::STEREO || mSensor==System::RGBD || mSensor==System::IMU_STEREO || mSensor==System::IMU_RGBD)
     {
+        // mThDepth用于表示近远点深度的阈值
         float fx = mpCamera->getParameter(0);
         cv::FileNode node = fSettings["ThDepth"];
         if(!node.empty()  && node.isReal())

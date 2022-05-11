@@ -220,11 +220,14 @@ public:
     float mThDepth;
 
     // Number of KeyPoints.
+    // pinhole相机模型中，无论单双目，用于记录左目图像提取的特征点个数（不涉及右目）
+    // KannalaBrandt8相机模型中，单目时用于记录单目图像提取的特征点个数，双目时用于记录左右目提取特征点总数N = Nleft + Nright
     int N;
 
     // Vector of keypoints (original for visualization) and undistorted (actually used by the system).
     // In the stereo case, mvKeysUn is redundant as images must be rectified.
     // In the RGB-D case, RGB images can be distorted.
+    // 用于存储左右目图像特征点坐标
     std::vector<cv::KeyPoint> mvKeys, mvKeysRight;
     std::vector<cv::KeyPoint> mvKeysUn;
 
@@ -239,6 +242,7 @@ public:
     DBoW2::FeatureVector mFeatVec;
 
     // ORB descriptor, each row associated to a keypoint.
+    // 用于存储左右目图像特征点描述子
     cv::Mat mDescriptors, mDescriptorsRight;
 
     // MapPoints associated to keypoints, NULL pointer if no association.
@@ -326,6 +330,8 @@ public:
     GeometricCamera* mpCamera, *mpCamera2;
 
     //Number of KeyPoints extracted in the left and right images
+    // 适用于KannalaBrandt8 双目相机模型，用于分别记录左右目图像提取的特征点个数
+    // 在其他情况或者pinhole相机模型中，Nleft=-1, Nright=-1
     int Nleft, Nright;
     //Number of Non Lapping Keypoints
     int monoLeft, monoRight;

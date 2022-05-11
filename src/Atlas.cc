@@ -166,6 +166,7 @@ GeometricCamera *Atlas::AddCamera(GeometricCamera *pCam)
     }
     else
     {
+        // 将传入的相机模型添加(push_back)到Atlas的mvpCameras成员变量中
         mvpCameras.push_back(pCam);
         return pCam;
     }
