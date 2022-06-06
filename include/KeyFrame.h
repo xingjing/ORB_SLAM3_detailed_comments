@@ -380,6 +380,8 @@ public:
     // KeyPoints, stereo coordinate and descriptors (all associated by an index)
     const std::vector<cv::KeyPoint> mvKeys;
     const std::vector<cv::KeyPoint> mvKeysUn;
+    // mvuRight中存放着极限校准后双目特征点在右目对应的像素横坐标
+    // 如果不是基线校准的双目或者没有找到匹配点，其值将为-1（或者rgbd）
     const std::vector<float> mvuRight; // negative value for monocular points
     const std::vector<float> mvDepth; // negative value for monocular points
     const cv::Mat mDescriptors;

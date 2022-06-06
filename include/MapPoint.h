@@ -213,6 +213,8 @@ protected:
      Eigen::Vector3f mWorldPos;
 
      // Keyframes observing the point and associated index in keyframe
+     // 记录能观察到MapPoints的KeyFrames
+    //  键指的是观测到该地图点的关键帧ID，而值指的是该地图点在该关键帧中对应的特征的索引ID（考虑到双目的情况，所以索引也是tuple）
      std::map<KeyFrame*,std::tuple<int,int> > mObservations;
      // For save relation without pointer, this is necessary for save/load function
      std::map<long unsigned int, int> mBackupObservationsId1;

@@ -149,6 +149,8 @@ public:
 
     // Lists used to recover the full camera trajectory at the end of the execution.
     // Basically we store the reference keyframe for each frame and its relative transformation
+    // 用于程序运行完毕后在最后计算整个轨迹位姿
+    // 主要存储每个普通帧的参考关键帧，以及普通帧相对于参考关键帧的相对位姿变换
     list<Sophus::SE3f> mlRelativeFramePoses;
     list<KeyFrame*> mlpReferences;
     list<double> mlFrameTimes;
@@ -271,7 +273,9 @@ protected:
 
     //Local Map
     KeyFrame* mpReferenceKF;
+    // 表示当前的局部关键帧
     std::vector<KeyFrame*> mvpLocalKeyFrames;
+    // 表示当前的局部地图点
     std::vector<MapPoint*> mvpLocalMapPoints;
     
     // System

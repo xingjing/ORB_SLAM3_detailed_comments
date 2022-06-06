@@ -232,6 +232,7 @@ public:
     std::vector<cv::KeyPoint> mvKeysUn;
 
     // Corresponding stereo coordinate and depth for each keypoint.
+    // 存放当前帧生成的MapPoints
     std::vector<MapPoint*> mvpMapPoints;
     // "Monocular" keypoints have a negative value.
     std::vector<float> mvuRight;
@@ -247,6 +248,9 @@ public:
 
     // MapPoints associated to keypoints, NULL pointer if no association.
     // Flag to identify outlier associations.
+    // 长度和mCurrent.mvpMapPoints相同，用于表示某个地图点是不是为Outlier
+    // 如果当前地图点是Outlier，就被赋为True，否则就为False
+    // mCurrentFrame.mvbOutliers在Frame的构造函数中被赋了初始值，全为False
     std::vector<bool> mvbOutlier;
     int mnCloseMPs;
 

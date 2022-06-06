@@ -2743,6 +2743,7 @@ void Tracking::StereoInitialization()
         mpAtlas->AddKeyFrame(pKFini);
 
         // Create MapPoints and asscoiate to KeyFrame
+        // 不是KannalaBrandt8双目的情况：
         if(!mpCamera2){
             // 为每个特征点构造MapPoint
             for(int i=0; i<mCurrentFrame.N;i++)
@@ -2754,21 +2755,30 @@ void Tracking::StereoInitialization()
                     // 通过反投影得到该特征点的世界坐标系下3D坐标
                     Eigen::Vector3f x3D;
                     mCurrentFrame.UnprojectStereo(i, x3D);
+                    // 基于计算好的3D坐标x、y分量、初始关键帧pKFini、以及当前地图指针，新建一个MapPoint对象pNewMP
                     MapPoint* pNewMP = new MapPoint(x3D, pKFini, mpAtlas->GetCurrentMap());
                     // 为该MapPoint添加属性：
 	                // a.观测到该MapPoint的关键帧
 	                // b.该MapPoint的描述子
 	                // c.该MapPoint的平均观测方向和深度范围
+                    // 通过以下AddObservation与AddMapPoints建立地图点MapPoint与关键帧KeyFrame之间的双向联系
+                    // 添加观测：当前初始关键帧pKFini，在初始关键帧pKFini中特征点的索引
                     pNewMP->AddObservation(pKFini,i);
+                    // 添加地图点：新创建的地图点pNewMP，在初始关键帧pKFini中特征点的索引
                     pKFini->AddMapPoint(pNewMP,i);
+                    
                     pNewMP->ComputeDistinctiveDescriptors();
                     pNewMP->UpdateNormalAndDepth();
+                    // 将新地图点pNewMP添加到地图中
                     mpAtlas->AddMapPoint(pNewMP);
 
+                    // 将新地图点pNewMP添加到当前帧的mvpMapPoints中
+                    // （而不是初始关键帧pKFini，虽然初始关键帧是通过当前帧新构建的）
                     mCurrentFrame.mvpMapPoints[i]=pNewMP;
                 }
             }
         } else{
+            // KannalaBrandt8双目的情况：
             for(int i = 0; i < mCurrentFrame.Nleft; i++){
                 int rightIndex = mCurrentFrame.mvLeftToRightMatch[i];
                 if(rightIndex != -1){
@@ -2796,6 +2806,7 @@ void Tracking::StereoInitialization()
 
         //cout << "Active map: " << mpAtlas->GetCurrentMap()->GetId() << endl;
         // 在局部地图中添加该初始关键帧
+        // 将初始关键帧pKFini通过LocalMapping的成员函数InsertKeyFrame()传给LocalMapping线程
         mpLocalMapper->InsertKeyFrame(pKFini);
 
         // 更新当前帧为上一帧
@@ -2919,6 +2930,8 @@ void Tracking::MonocularInitialization()
             }
 
             // Set Frame Poses
+            // 此处奠定了整个地图的初始设置，第一帧为世界坐标系原点，变换矩阵为单位阵；
+            // 第二帧由H或F模型计算得到的Tcw作为四阶坐标系到相机坐标系的变换矩阵
             // Step 7 将初始化的第一帧作为世界坐标系，因此第一帧变换矩阵为单位矩阵
             mInitialFrame.SetPose(Sophus::SE3f());
             // 由Rcw和tcw构造Tcw,并赋值给mTcw，mTcw为世界坐标系到相机坐标系的变换矩阵
@@ -3384,6 +3397,7 @@ bool Tracking::TrackWithMotionModel()
     {
         // Predict state with IMU if it is initialized and it doesnt need reset
         // IMU完成初始化 并且 距离重定位挺久不需要重置IMU，用IMU来估计位姿，没有后面的这那那这的
+        // 根据IMU的观测，算出初始位姿，并直接赋给mCurrentFrame
         PredictStateIMU();
         return true;
     }
@@ -3394,6 +3408,8 @@ bool Tracking::TrackWithMotionModel()
     }
 
     // 清空当前帧的地图点
+    // 将当前帧mCurrentFrame的地图点列表mvpMapPoints全部清空
+    // 把每个元素都赋为NULL(用空指针填充mvpMapPoints)
     fill(mCurrentFrame.mvpMapPoints.begin(),mCurrentFrame.mvpMapPoints.end(),static_cast<MapPoint*>(NULL));
 
     // Project points seen in previous frame
@@ -3406,6 +3422,7 @@ bool Tracking::TrackWithMotionModel()
         th=15;
 
     // Step 3：用上一帧地图点进行投影匹配，如果匹配点不够，则扩大搜索半径再来一次
+    // 尝试将上一帧mLastFrame的地图点投影到当前帧中进行匹配并返回匹配到的个数
     int nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,th,mSensor==System::MONOCULAR || mSensor==System::IMU_MONOCULAR);
 
     // If few matches, uses a wider window search
@@ -3478,6 +3495,8 @@ bool Tracking::TrackWithMotionModel()
 
 /**
  * @brief 用局部地图进行跟踪，进一步优化位姿
+ * 运行TrackLocalMap()函数的前提是已经有了一些局部地图点以及相关联的局部关键帧
+ * 主要涉及到当前帧、当前帧的MapPoints、当前关键帧与其它关键帧共视关系
  * 
  * 1. 更新局部地图，包括局部关键帧和关键点
  * 2. 对局部MapPoints进行投影匹配
@@ -3501,6 +3520,7 @@ bool Tracking::TrackLocalMap()
     // Step 1：更新局部关键帧 mvpLocalKeyFrames 和局部地图点 mvpLocalMapPoints
     UpdateLocalMap();
     // Step 2：筛选局部地图中新增的在视野范围内的地图点，投影到当前帧搜索匹配，得到更多的匹配关系
+    // 将局部地图点投影到当前帧，去掉不在视野内的无效的地图点，剩下的局部地图点投影到当前帧进行匹配(SearchByProjection()函数)
     SearchLocalPoints();
 
     // TOO check outliers before PO
@@ -3994,13 +4014,14 @@ void Tracking::CreateNewKeyFrame()
 
 /**
  * @brief 用局部地图点进行投影匹配，得到更多的匹配关系
+ * 将局部地图点投影到当前帧，去掉不在视野内的无效的地图点，剩下的局部地图点投影到当前帧进行匹配(SearchByProjection()函数)
  * 注意：局部地图点中已经是当前帧地图点的不需要再投影，只需要将此外的并且在视野范围内的点和当前帧进行投影匹配
  */
 void Tracking::SearchLocalPoints()
 {
     // Do not search map points already matched
     // Step 1：遍历当前帧的地图点，标记这些地图点不参与之后的投影搜索匹配
-    for(vector<MapPoint*>::iterator vit=mCurrentFrame.mvpMapPoints.begin(), vend=mCurrentFrame.mvpMapPoints.end(); vit!=vend; vit++)
+        for(vector<MapPoint*>::iterator vit=mCurrentFrame.mvpMapPoints.begin(), vend=mCurrentFrame.mvpMapPoints.end(); vit!=vend; vit++)
     {
         MapPoint* pMP = *vit;
         if(pMP)
@@ -4027,6 +4048,7 @@ void Tracking::SearchLocalPoints()
 
     // Project points in frame and check its visibility
     // Step 2：判断所有局部地图点中除当前帧地图点外的点，是否在当前帧视野范围内
+    // 检查可视关系，是否在视野之内
     for(vector<MapPoint*>::iterator vit=mvpLocalMapPoints.begin(), vend=mvpLocalMapPoints.end(); vit!=vend; vit++)
     {
         MapPoint* pMP = *vit;
@@ -4053,6 +4075,7 @@ void Tracking::SearchLocalPoints()
     }
 
     // Step 3：如果需要进行投影匹配的点的数目大于0，就进行投影匹配，增加更多的匹配关系
+    // 对投影的地图点进行匹配
     if(nToMatch>0)
     {
         ORBmatcher matcher(0.8);
@@ -4098,7 +4121,9 @@ void Tracking::UpdateLocalMap()
 
     // Update
     // 用共视图来更新局部关键帧和局部地图点
+    // 更新关键帧相关的变量，主要是更新mvpLocalKeyFrames(局部关键帧列表)
     UpdateLocalKeyFrames();
+    // 用于更新局部地图点
     UpdateLocalPoints();
 }
 
@@ -4112,13 +4137,17 @@ void Tracking::UpdateLocalPoints()
 
     int count_pts = 0;
 
-    // Step 2：遍历局部关键帧 mvpLocalKeyFrames
+    // Step 2：遍历局部关键帧列表 mvpLocalKeyFrames
     for(vector<KeyFrame*>::const_reverse_iterator itKF=mvpLocalKeyFrames.rbegin(), itEndKF=mvpLocalKeyFrames.rend(); itKF!=itEndKF; ++itKF)
     {
+        // 对于每一个关键帧，都调用GetMapPointMatches()成员函数，获取匹配的地图点
+        // 得到一个MapPoint类型的vector，其实就是返回的KeyFrame类的mvpMapPoints成员变量
         KeyFrame* pKF = *itKF;
         const vector<MapPoint*> vpMPs = pKF->GetMapPointMatches();
 
         // step 2：将局部关键帧的地图点添加到mvpLocalMapPoints
+        // 逐个遍历这个MapPoint类型的vector，对于其中的每个地图点都进行判断
+        // 如果为空，跳过；如果该地图点的参考帧ID和当前帧ID相同，跳过；如果当前地图点是坏的(isBad())，也跳过
         for(vector<MapPoint*>::const_iterator itMP=vpMPs.begin(), itEndMP=vpMPs.end(); itMP!=itEndMP; itMP++)
         {
 
@@ -4131,6 +4160,7 @@ void Tracking::UpdateLocalPoints()
                 continue;
             if(!pMP->isBad())
             {
+                // 如果上面的条件都不满足，那么就将其放到局部地图点列表mvpLocalMapPoints，并将该地图点的参考帧ID设为当前帧
                 count_pts++;
                 mvpLocalMapPoints.push_back(pMP);
                 pMP->mnTrackReferenceForFrame=mCurrentFrame.mnId;
@@ -4141,6 +4171,7 @@ void Tracking::UpdateLocalPoints()
 
 /**
  * @brief 跟踪局部地图函数里，更新局部关键帧
+ * 根据初始得到的地图点与估计的关键帧位姿和状态，判断哪些关键帧是和当前局部地图点绑定的(可以观测的)，为之后优化构建观测边打基础
  * 方法是遍历当前帧的地图点，将观测到这些地图点的关键帧和相邻的关键帧及其父子关键帧，作为mvpLocalKeyFrames
  * Step 1：遍历当前帧的地图点，记录所有能观测到当前帧地图点的关键帧 
  * Step 2：更新局部关键帧（mvpLocalKeyFrames），添加局部关键帧包括以下3种类型
@@ -4153,6 +4184,7 @@ void Tracking::UpdateLocalKeyFrames()
 {
     // Each map point vote for the keyframes in which it has been observed
     // Step 1：遍历当前帧的地图点，记录所有能观测到当前帧地图点的关键帧
+    // 基于现有地图点进行统计(GetObservations())，看哪些关键帧观测到它们
     map<KeyFrame*,int> keyframeCounter;
     // 如果IMU未初始化 或者 刚刚完成重定位
     if(!mpAtlas->isImuInitialized() || (mCurrentFrame.mnId<mnLastRelocFrameId+2))
@@ -4162,6 +4194,7 @@ void Tracking::UpdateLocalKeyFrames()
             MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
             if(pMP)
             {
+                // 判断地图点状态是否OK
                 if(!pMP->isBad())
                 {
                     // 得到观测到该地图点的关键帧和该地图点在关键帧中的索引
@@ -4208,6 +4241,7 @@ void Tracking::UpdateLocalKeyFrames()
     }
 
     // 存储具有最多观测次数（max）的关键帧
+    // 把当前的所有局部关键帧列表清空，并预留3倍原先大小的vector
     int max=0;
     KeyFrame* pKFmax= static_cast<KeyFrame*>(NULL);
 
@@ -4219,10 +4253,14 @@ void Tracking::UpdateLocalKeyFrames()
 
     // All keyframes that observe a map point are included in the local map. Also check which keyframe shares most points
     // Step 2.1 类型1：能观测到当前帧地图点的关键帧作为局部关键帧 （将邻居拉拢入伙）（一级共视关键帧）
+    // 遍历刚刚得到的keyframeCounter变量，依次将关键帧添加进来
     for(map<KeyFrame*,int>::const_iterator it=keyframeCounter.begin(), itEnd=keyframeCounter.end(); it!=itEnd; it++)
     {
+        // keyframeCounter第一个元素(键)是我们需要的关键帧，将其获取到pKF
         KeyFrame* pKF = it->first;
 
+        // 对pKF做一系列的判断，看看是否是异常情况
+        // 如果不是异常情况，就把当前关键帧添加到局部关键帧列表mvpLocalKeyFrames中来，并把其参考关键帧ID设为当前帧
         // 如果设定为要删除的，跳过
         if(pKF->isBad())
             continue;
@@ -4240,13 +4278,16 @@ void Tracking::UpdateLocalKeyFrames()
         // 表示它已经是当前帧的局部关键帧了，可以防止重复添加局部关键帧
         pKF->mnTrackReferenceForFrame = mCurrentFrame.mnId;
     }
+    // 通过以上步骤，把每个地图点中记录的、符合条件的观测关键帧添加到了局部关键帧列表mvpLocalKeyFrames中
 
     // Include also some not-already-included keyframes that are neighbors to already-included keyframes
     // Step 2.2 遍历一级共视关键帧，寻找更多的局部关键帧 
+    // 把上面添加的这些关键帧的相邻关键帧也加到mvpLocalKeyFrames中
     for(vector<KeyFrame*>::const_iterator itKF=mvpLocalKeyFrames.begin(), itEndKF=mvpLocalKeyFrames.end(); itKF!=itEndKF; itKF++)
     {
         // Limit the number of keyframes
         // 处理的局部关键帧不超过80帧
+        // 为了性能考虑，如果当前局部地图列表中已经有80个关键帧了，就不再添加新的关键帧了
         if(mvpLocalKeyFrames.size()>80) // 80
             break;
 
@@ -4254,9 +4295,11 @@ void Tracking::UpdateLocalKeyFrames()
 
         // 类型2:一级共视关键帧的共视（前10个）关键帧，称为二级共视关键帧（将邻居的邻居拉拢入伙）
         // 如果共视帧不足10帧,那么就返回所有具有共视关系的关键帧
+        // 返回指定个数个最优共视关键帧
         const vector<KeyFrame*> vNeighs = pKF->GetBestCovisibilityKeyFrames(10);
 
         // vNeighs 是按照共视程度从大到小排列
+        // 逐个遍历这个共视关键帧列表，如果这个关键帧状态OK，并且其参考关键帧ID不等于当前帧ID的话，就将其添加到局部关键帧列表mvpLocalKeyFrames中
         for(vector<KeyFrame*>::const_iterator itNeighKF=vNeighs.begin(), itEndNeighKF=vNeighs.end(); itNeighKF!=itEndNeighKF; itNeighKF++)
         {
             KeyFrame* pNeighKF = *itNeighKF;
@@ -4273,7 +4316,9 @@ void Tracking::UpdateLocalKeyFrames()
         }
 
         // 类型3:将一级共视关键帧的子关键帧作为局部关键帧（将邻居的孩子们拉拢入伙）
+        // 调用KeyFrame的成员函数GetChilds()来获得子关键帧
         const set<KeyFrame*> spChilds = pKF->GetChilds();
+        // 逐个遍历这个set中的关键帧，如果满足条件，就添加到局部关键帧列表mvpLocalKeyFrames中
         for(set<KeyFrame*>::const_iterator sit=spChilds.begin(), send=spChilds.end(); sit!=send; sit++)
         {
             KeyFrame* pChildKF = *sit;
@@ -4289,7 +4334,9 @@ void Tracking::UpdateLocalKeyFrames()
         }
 
         // 类型3:将一级共视关键帧的父关键帧（将邻居的父母们拉拢入伙）
+        // 调用KeyFrame的GetParent()函数获取父关键帧
         KeyFrame* pParent = pKF->GetParent();
+        // 判断父关键帧是否满足条件，如果满足就添加到局部关键帧列表mvpLocalKeyFrames中
         if(pParent)
         {
             // mnTrackReferenceForFrame防止重复添加局部关键帧
@@ -4304,8 +4351,11 @@ void Tracking::UpdateLocalKeyFrames()
 
     // Add 10 last temporal KFs (mainly for IMU)
     // IMU模式下增加了临时的关键帧
+    // 如果当前传感器有IMU，并且局部关键帧列表mvpLocalKeyFrames中关键帧个数还没够80的话，就继续添加一些关键帧
     if((mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD) &&mvpLocalKeyFrames.size()<80)
     {
+        // 以当前关键帧为起始，添加最近的20个关键帧
+        // 通过访问KeyFrame的mpLastKeyFrame变量来找到上一个关键帧
         KeyFrame* tempKeyFrame = mCurrentFrame.mpLastKeyFrame;
 
         const int Nd = 20;
@@ -4315,6 +4365,7 @@ void Tracking::UpdateLocalKeyFrames()
             if(tempKeyFrame->mnTrackReferenceForFrame!=mCurrentFrame.mnId)
             {
                 mvpLocalKeyFrames.push_back(tempKeyFrame);
+                // 通过将上个关键帧赋给tempKeyFrame这个临时变量，实现不断迭代
                 tempKeyFrame->mnTrackReferenceForFrame=mCurrentFrame.mnId;
                 tempKeyFrame=tempKeyFrame->mPrevKF;
             }

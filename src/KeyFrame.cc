@@ -272,6 +272,7 @@ vector<KeyFrame *> KeyFrame::GetVectorCovisibleKeyFrames()
 }
 
 // 得到与该关键帧连接的前N个关键帧(已按权值排序)
+// 返回指定个数个最优共视关键帧
 vector<KeyFrame *> KeyFrame::GetBestCovisibilityKeyFrames(const int &N)
 {
     unique_lock<mutex> lock(mMutexConnections);
@@ -431,6 +432,8 @@ MapPoint *KeyFrame::GetMapPoint(const size_t &idx)
 
 /*
  * 更新图的连接
+ * 父关键帧指的是与当前关键帧共视程度最高的关键帧，同时当前关键帧就成了父关键帧的子关键帧
+ * 这种连接关系是在KeyFrame的成员函数UpdateConnections()中被定义和修改
  * 
  * 1. 首先获得该关键帧的所有MapPoint点，统计观测到这些3d点的每个关键帧与其它所有关键帧之间的共视程度
  *    对每一个找到的关键帧，建立一条边，边的权重是该关键帧与当前关键帧公共3d点的个数。

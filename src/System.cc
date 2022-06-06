@@ -56,7 +56,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     cout << endl <<
     "ORB-SLAM3 Copyright (C) 2017-2020 Carlos Campos, Richard Elvira, Juan J. Gómez, José M.M. Montiel and Juan D. Tardós, University of Zaragoza." << endl <<
     "ORB-SLAM2 Copyright (C) 2014-2016 Raúl Mur-Artal, José M.M. Montiel and Juan D. Tardós, University of Zaragoza." << endl <<
-    "This program comes with ABSOLUTELY NO WARRANTY;" << endl  <<
+    "This program comes with ABSOLUTELY NO WARRANTY;" << endl  <<      
     "This is free software, and you are welcome to redistribute it" << endl <<
     "under certain conditions. See LICENSE.txt." << endl << endl;
 
@@ -732,6 +732,7 @@ void System::SaveTrajectoryEuRoC(const string &filename)
     int numMaxKFs = 0;
     Map* pBiggerMap;
     std::cout << "There are " << std::to_string(vpMaps.size()) << " maps in the atlas" << std::endl;
+    // 从Atlas地图中选取关键帧数量最多的那个地图
     for(Map* pMap :vpMaps)
     {
         std::cout << "  Map " << std::to_string(pMap->GetId()) << " has " << std::to_string(pMap->GetAllKeyFrames().size()) << " KFs" << std::endl;
@@ -742,15 +743,19 @@ void System::SaveTrajectoryEuRoC(const string &filename)
         }
     }
 
+    // 取出关键帧数量最多的那个地图的所有关键帧
     vector<KeyFrame*> vpKFs = pBiggerMap->GetAllKeyFrames();
+    // 按照关键帧序号排序
     sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
 
     // Transform all keyframes so that the first keyframe is at the origin.
     // After a loop closure the first keyframe might not be at the origin.
-    Sophus::SE3f Twb; // Can be word to cam0 or world to b depending on IMU or not.
+    Sophus::SE3f Twb; // Can be world to cam0 or world to b depending on IMU or not.
     if (mSensor==IMU_MONOCULAR || mSensor==IMU_STEREO || mSensor==IMU_RGBD)
+        // 如果有IMU，则Twb是世界坐标系到IMU的变换矩阵
         Twb = vpKFs[0]->GetImuPose();
     else
+        // 如果是纯视觉，Twb = Twc，Twb是世界坐标系到相机的变换矩阵
         Twb = vpKFs[0]->GetPoseInverse();
 
     ofstream f;
@@ -761,9 +766,15 @@ void System::SaveTrajectoryEuRoC(const string &filename)
     // Frame pose is stored relative to its reference keyframe (which is optimized by BA and pose graph).
     // We need to get first the keyframe pose and then concatenate the relative transformation.
     // Frames not localized (tracking failure) are not saved.
+    // 普通帧的位姿通过存储其相对于其参考关键帧的相对位姿计算得到（已经过BA和位姿图优化）
+    // 因此需要先得到参考关键帧位姿，然后基于相对位姿变换计算出来，再拼接为整个图像序列的普通帧位姿
+    // 对于跟踪失败的普通帧则没有保存其位姿信息
 
     // For each frame we have a reference keyframe (lRit), the timestamp (lT) and a flag
     // which is true when tracking failed (lbL).
+    // 参考关键帧lRit
+    // 时间戳lT
+    // flag指示是否跟踪失败，lbL==true则该帧跟踪失败没有位姿
     list<ORB_SLAM3::KeyFrame*>::iterator lRit = mpTracker->mlpReferences.begin();
     list<double>::iterator lT = mpTracker->mlFrameTimes.begin();
     list<bool>::iterator lbL = mpTracker->mlbLost.begin();
@@ -778,10 +789,10 @@ void System::SaveTrajectoryEuRoC(const string &filename)
         lend=mpTracker->mlRelativeFramePoses.end();lit!=lend;lit++, lRit++, lT++, lbL++)
     {
         //cout << "1" << endl;
-        if(*lbL)
+        if(*lbL)// 根据flag指示，该普通帧跟踪失败
             continue;
 
-
+        // 当前参考关键帧
         KeyFrame* pKF = *lRit;
         //cout << "KF: " << pKF->mnId << endl;
 
@@ -795,14 +806,18 @@ void System::SaveTrajectoryEuRoC(const string &filename)
 
         while(pKF->isBad())
         {
+            // 如果当前关键帧不好，获取当前关键帧的父关键帧作为参考关键帧
             //cout << " 2.bad" << endl;
+            // mTcp：Pose relative to parent (this is computed when bad flag is activate
             Trw = Trw * pKF->mTcp;
+            // 获取当前关键帧的父关键帧
             pKF = pKF->GetParent();
             //cout << "--Parent KF: " << pKF->mnId << endl;
         }
 
         if(!pKF || pKF->GetMap() != pBiggerMap)
-        {
+        {   
+            // 如果刚刚更换的父关键帧不是来自当前的具有最多关键帧的地图，而是来自其他地图，则不再计算当前帧位姿
             //cout << "--Parent KF is from another map" << endl;
             continue;
         }

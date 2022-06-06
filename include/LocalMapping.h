@@ -103,6 +103,7 @@ public:
 
     bool mbNotBA1;
     bool mbNotBA2;
+    //IMU结果是否为坏，==true IMU结果不好，==false IMU结果没问题
     bool mbBadImu;
 
     bool mbWriteStats;

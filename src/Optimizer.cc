@@ -811,31 +811,57 @@ void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const l
 }
 
 
+// g2o优化基本步骤：
+// (1) 定义顶点和边的类型
+// 在整个ORB-SLAM2系统中，没有自定义的顶点或边类型，所以第一步就可以忽略了。
+// 在ORB-SLAM3里由于引入了IMU，所以有一些自定义边和节点，都放在了G2OTypes中
+// (2) 构建优化图
+// (3) 选择优化算法
+// (4) 调用g2o优化，返回结果
+
+// 仅优化位姿，不优化地图点，用于跟踪过程
+// 输入是Frame影像帧，输出是内点个数
+// 在本函数中，我们的目标是根据地图优化当前帧的位姿。
+// 因此我们把当前帧位姿变成一个节点、地图点的观测作为边(约束)。
+// 这里优化图中只有一个节点，因此，边就是一个一元边(Unary Edge)，也就是只连接到一个节点(或者理解为从自己指向自己)
 int Optimizer::PoseOptimization(Frame *pFrame)
 {
+    // 构造求解器，并对其进行一系列初始化
     g2o::SparseOptimizer optimizer;
     g2o::BlockSolver_6_3::LinearSolverType * linearSolver;
 
     linearSolver = new g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>();
 
+    // 新建一个稀疏优化器
     g2o::BlockSolver_6_3 * solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
 
+    // 将优化算法设置为Levenberg
     g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
     optimizer.setAlgorithm(solver);
 
     int nInitialCorrespondences=0;
 
     // Set Frame vertex
+    // 将输入的影像帧Frame作为优化的一个节点
     g2o::VertexSE3Expmap * vSE3 = new g2o::VertexSE3Expmap();
-    Sophus::SE3<float> Tcw = pFrame->GetPose();
+    // 将节点的初值设置为传入帧的估计位姿
+    Sophus::SE3<float> Tcw = pFrame->GetPose();// 获取当前帧的位姿，作为每次优化的初值
     vSE3->setEstimate(g2o::SE3Quat(Tcw.unit_quaternion().cast<double>(),Tcw.translation().cast<double>()));
+    // 节点ID设为0
     vSE3->setId(0);
+    // 由于这里优化的就是帧的位姿，所以它不能是固定的
+    // 但在之后的添加地图点的过程中，这些地图点就是固定的了
     vSE3->setFixed(false);
+    // 将构造好的节点添加到优化器中
     optimizer.addVertex(vSE3);
 
     // Set MapPoint vertices
-    const int N = pFrame->N;
+    // 根据影像帧所对应的地图点添加节点并且将其和刚刚添加的帧节点进行连接
+    const int N = pFrame->N;//获取当前帧提取的ORB特征点的个数
 
+    // 将对地图点的观测作为边(约束)，由于有多个地图点，所以我们构建vector来存放这些节点
+    // 如果是双目模式，如果某个特征点双目匹配成功、有对应的地图点，那么这个地图点就会被构建双目边；
+    // 如果左目影像中的特征点在右目影像中没有对应，那么就建立单目边
     vector<ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose*> vpEdgesMono;
     vector<ORB_SLAM3::EdgeSE3ProjectXYZOnlyPoseToBody *> vpEdgesMono_FHR;
     vector<size_t> vnIndexEdgeMono, vnIndexEdgeRight;
@@ -852,55 +878,75 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     const float deltaMono = sqrt(5.991);
     const float deltaStereo = sqrt(7.815);
 
+    // 以下花括号内容为添加边
     {
     unique_lock<mutex> lock(MapPoint::mGlobalMutex);
 
+    // 对于输入帧中的地图点mvpMapPoints列表进行逐个遍历
     for(int i=0; i<N; i++)
     {
-        MapPoint* pMP = pFrame->mvpMapPoints[i];
+        MapPoint* pMP = pFrame->mvpMapPoints[i];//根据索引，获取当前帧关联的某个MapPoint类型的地图点
+        // 判断地图点是否为NULL
         if(pMP)
         {
             //Conventional SLAM
+            // 传统相机，非鱼眼双目的情况
             if(!pFrame->mpCamera2){
                 // Monocular observation
-                if(pFrame->mvuRight[i]<0)
+                // 单目情况
+                if(pFrame->mvuRight[i]<0)//pFrame->mvuRight[i]：根据索引，获取某个地图点对应右目图像上的横坐标(针对双目情况，该值默认为-1)
                 {
                     nInitialCorrespondences++;
                     pFrame->mvbOutlier[i] = false;
 
+                    // 获取到该地图点的观测，也就是其在影像上对应的像素坐标x、y，二维向量
                     Eigen::Matrix<double,2,1> obs;
-                    const cv::KeyPoint &kpUn = pFrame->mvKeysUn[i];
+                    const cv::KeyPoint &kpUn = pFrame->mvKeysUn[i];//pFrame->mvKeysUn[i]:根据索引，获取某个cv::KeyPoint类型的特征点对象
                     obs << kpUn.pt.x, kpUn.pt.y;
 
+                    // 新建一个边对象
+                    // 对于单目而言，我们构建的是g2o::EdgeSE3ProjectXYZOnlyPose类型的边，表达将地图点投影到相机坐标系下的相机平面
                     ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose* e = new ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose();
 
+                    // 将刚刚的观测添加到该边
                     e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
-                    e->setMeasurement(obs);
-                    const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
+                    e->setMeasurement(obs);//设置地图点观测(误差计算其实就是和观测有关的)
+                    // 设置信息矩阵
+                    const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];//pFrame->mvInvLevelSigma2[kpUn.octave]:根据特征点所在金字塔层数获取对应的sigma值
                     e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
 
+                    // 设置RobustKernel、Dalta
                     g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
                     e->setRobustKernel(rk);
                     rk->setDelta(deltaMono);
 
+                    // 设置该条边对应的相机模型、地图点的世界坐标
                     e->pCamera = pFrame->mpCamera;
                     e->Xw = pMP->GetWorldPos().cast<double>();
 
+                    // 将该边添加到优化器中
                     optimizer.addEdge(e);
 
+                    // 为了之后便于管理，也将该边push_back到vpEdgesMono中
                     vpEdgesMono.push_back(e);
                     vnIndexEdgeMono.push_back(i);
                 }
                 else  // Stereo observation
-                {
+                {   
+                    // pinhole双目情况，过程与单目类似
+                    // 首先还是获取到该地图点对应的像素坐标，然后构造边。
+                    // 之后设置该边的一系列观测、信息矩阵、RobustKernel、Delta、相机的内参(fx、fy、cx、cy)、双目基线(bf)以及该地图点的世界坐标(Xw)。
+                    // 然后将其添加到优化器中，同时为便于管理，也将其放到vpEdgesStereo中
                     nInitialCorrespondences++;
                     pFrame->mvbOutlier[i] = false;
 
+                    // 相比于单目的观测，双目的观测是一个三维向量，增加了pFrame->mvuRight[i]
                     Eigen::Matrix<double,3,1> obs;
                     const cv::KeyPoint &kpUn = pFrame->mvKeysUn[i];
                     const float &kp_ur = pFrame->mvuRight[i];
                     obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
 
+                    // 双目构建的是g2o::EdgeStereoSE3ProjectXYZOnlyPose类型的边
                     g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = new g2o::EdgeStereoSE3ProjectXYZOnlyPose();
 
                     e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
@@ -913,7 +959,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                     e->setRobustKernel(rk);
                     rk->setDelta(deltaStereo);
 
-                    e->fx = pFrame->fx;
+                    e->fx = pFrame->fx;//获取储存在Frame类中的相机内参(双目的话多一个mbf)
                     e->fy = pFrame->fy;
                     e->cx = pFrame->cx;
                     e->cy = pFrame->cy;
@@ -927,15 +973,18 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                 }
             }
             //SLAM with respect a rigid body
-            else{
+            else{// 鱼眼双目的情况
                 nInitialCorrespondences++;
 
                 cv::KeyPoint kpUn;
 
+                // 如果地图点的索引是小于Nleft，是属于左相机的观测，否则是属于右相机的观测
+                // 获取地图点的观测、新建边、向边添加观测、信息矩阵、RobustKernel、Delta、相机模型、世界坐标。
+                // 然后添加地图点的世界坐标。最后，向优化器中添加边，并且将其添加到vpEdgesMono中
                 if (i < pFrame->Nleft) {    //Left camera observation
                     kpUn = pFrame->mvKeys[i];
 
-                    pFrame->mvbOutlier[i] = false;
+                    pFrame->mvbOutlier[i] = false;//pFrame->mvbOutlier[i]:根据索引，获取某个地图点是否是离群点的flag(该值默认为false)
 
                     Eigen::Matrix<double, 2, 1> obs;
                     obs << kpUn.pt.x, kpUn.pt.y;
@@ -960,6 +1009,8 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                     vnIndexEdgeMono.push_back(i);
                 }
                 else {
+                    // 右相机的观测
+                    // 总流程与左相机类似，唯一不同是将边添加到vpEdgeMono_FHR
                     kpUn = pFrame->mvKeysRight[i - pFrame->Nleft];
 
                     Eigen::Matrix<double, 2, 1> obs;
@@ -996,11 +1047,14 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     if(nInitialCorrespondences<3)
         return 0;
 
+    // 开始实际的优化过程
+    // 会进行4次优化。每次优化三个部分：vpEdgeMono、vpEdgesMono_FHR、vpEdgesStereo。
+    // 对于不同的传感器，会添加不同的边。所以到这一步，并不会同时优化所有这三个类型的边。这里面肯定存在为0的列表，这样就直接跳过了
     // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
     // At the next optimization, outliers are not included, but at the end they can be classified as inliers again.
     const float chi2Mono[4]={5.991,5.991,5.991,5.991};
     const float chi2Stereo[4]={7.815,7.815,7.815, 7.815};
-    const int its[4]={10,10,10,10};    
+    const int its[4]={10,10,10,10};//每次优化包含10次迭代
 
     int nBad=0;
     for(size_t it=0; it<4; it++)
@@ -1011,6 +1065,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
         optimizer.initializeOptimization(0);
         optimizer.optimize(its[it]);
 
+        // 单目的边，对每条边都计算误差
         nBad=0;
         for(size_t i=0, iend=vpEdgesMono.size(); i<iend; i++)
         {
@@ -1041,6 +1096,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                 e->setRobustKernel(0);
         }
 
+        // 对于鱼眼相机的右相机，也添加边
         for(size_t i=0, iend=vpEdgesMono_FHR.size(); i<iend; i++)
         {
             ORB_SLAM3::EdgeSE3ProjectXYZOnlyPoseToBody* e = vpEdgesMono_FHR[i];
@@ -1070,6 +1126,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                 e->setRobustKernel(0);
         }
 
+        // 对于双目相机，添加边
         for(size_t i=0, iend=vpEdgesStereo.size(); i<iend; i++)
         {
             g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = vpEdgesStereo[i];
@@ -1103,31 +1160,39 @@ int Optimizer::PoseOptimization(Frame *pFrame)
             break;
     }    
 
+    // 最后，将优化后的位姿重新赋给传入的影像帧Frame，并且返回内点的个数，完成优化
     // Recover optimized pose and return number of inliers
     g2o::VertexSE3Expmap* vSE3_recov = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(0));
     g2o::SE3Quat SE3quat_recov = vSE3_recov->estimate();
     Sophus::SE3<float> pose(SE3quat_recov.rotation().cast<float>(),
             SE3quat_recov.translation().cast<float>());
+    // 将优化更新后的当前帧位姿重新赋给当前帧
     pFrame->SetPose(pose);
 
     return nInitialCorrespondences-nBad;
+    // 除了以上Inliers数量以外，还会通过pFrame返回一些内容：
+    // pFrame->mvbOutlier[i] = false/true: 根据地图点边的误差大小判断该点是否属于外点，如果是的话就设为true，否则设为false
+    // pFrame->SetPose(pose): 将优化更新后的当前帧位姿重新赋给当前帧
 }
 
+// 输入：当前关键帧KeyFrame，是否停止的flagpbStopFlag以及当前地图pMap
 void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges)
 {
     // Local KeyFrames: First Breath Search from Current Keyframe
     list<KeyFrame*> lLocalKeyFrames;
 
     lLocalKeyFrames.push_back(pKF);
-    pKF->mnBALocalForKF = pKF->mnId;
+    pKF->mnBALocalForKF = pKF->mnId;//获取当前关键帧的ID
     Map* pCurrentMap = pKF->GetMap();
 
+    // 获取和当前关键帧共视的其它关键帧，保存在vector类型的vNeighKFs中
     const vector<KeyFrame*> vNeighKFs = pKF->GetVectorCovisibleKeyFrames();
     for(int i=0, iend=vNeighKFs.size(); i<iend; i++)
     {
         KeyFrame* pKFi = vNeighKFs[i];
         pKFi->mnBALocalForKF = pKF->mnId;
         if(!pKFi->isBad() && pKFi->GetMap() == pCurrentMap)
+            // 最终vNeighKFs中的相邻共视关键帧连同输入函数的当前关键帧pKF一起，被添加到list类型的lLocalKeyFrames中
             lLocalKeyFrames.push_back(pKFi);
     }
 
@@ -1135,6 +1200,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
     num_fixedKF = 0;
     list<MapPoint*> lLocalMapPoints;
     set<MapPoint*> sNumObsMP;
+    // 遍历lLocalKeyFrames中的关键帧进行后续操作
     for(list<KeyFrame*>::iterator lit=lLocalKeyFrames.begin() , lend=lLocalKeyFrames.end(); lit!=lend; lit++)
     {
         KeyFrame* pKFi = *lit;
@@ -4489,8 +4555,10 @@ void Optimizer::MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool *pbS
     pMap->IncreaseChangeIndex();
 }
 
+// 与PoseInertialOptimizationLastFrame()的作用是类似的，但是针对关键帧进行位姿优化
 int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit)
 {
+    // 初始化优化器
     g2o::SparseOptimizer optimizer;
     g2o::BlockSolverX::LinearSolverType * linearSolver;
 
@@ -4507,6 +4575,8 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     int nInitialCorrespondences=0;
 
     // Set Frame vertex
+    // 设置帧节点
+    // 与之前类似的，除了位姿节点(VertexPose)，还包含速度节点(VertexVelocity)、陀螺仪偏置节点(VertexGyroBias)、加速度偏置节点(VertexAccBias)
     VertexPose* VP = new VertexPose(pFrame);
     VP->setId(0);
     VP->setFixed(false);
@@ -4525,6 +4595,7 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     optimizer.addVertex(VA);
 
     // Set MapPoint vertices
+    // 设置地图节点
     const int N = pFrame->N;
     const int Nleft = pFrame->Nleft;
     const bool bRight = (Nleft!=-1);
@@ -4541,6 +4612,7 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     const float thHuberMono = sqrt(5.991);
     const float thHuberStereo = sqrt(7.815);
 
+    // 逐个遍历地图节点，进行节点添加
     {
         unique_lock<mutex> lock(MapPoint::mGlobalMutex);
 
@@ -4551,6 +4623,7 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
             {
                 cv::KeyPoint kpUn;
 
+                // 相机模型分类情况与PoseInertialOptimizationLastFrame类似
                 // Left monocular observation
                 // 这里说的Left monocular包含两种情况：1.单目情况 2.两个相机情况下的相机1
                 if((!bRight && pFrame->mvuRight[i]<0) || i < Nleft)
@@ -4654,6 +4727,7 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     }
     nInitialCorrespondences = nInitialMonoCorrespondences + nInitialStereoCorrespondences;
 
+    // 与之前PoseInertialOptimizationLastFrame()函数不同，这里多加了一个关键帧节点
     KeyFrame* pKF = pFrame->mpLastKeyFrame;
     VertexPose* VPk = new VertexPose(pKF);
     VPk->setId(4);
@@ -4672,6 +4746,7 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     VAk->setFixed(true);
     optimizer.addVertex(VAk);
 
+    // 与PoseInertialOptimizationLastFrame()函数类似的，IMU预积分节点
     EdgeInertial* ei = new EdgeInertial(pFrame->mpImuPreintegrated);
 
     ei->setVertex(0, VPk);
@@ -4682,6 +4757,7 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     ei->setVertex(5, VV);
     optimizer.addEdge(ei);
 
+    // 陀螺仪节点
     EdgeGyroRW* egr = new EdgeGyroRW();
     egr->setVertex(0,VGk);
     egr->setVertex(1,VG);
@@ -4689,6 +4765,7 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     egr->setInformation(InfoG);
     optimizer.addEdge(egr);
 
+    // 加速度计节点
     EdgeAccRW* ear = new EdgeAccRW();
     ear->setVertex(0,VAk);
     ear->setVertex(1,VA);
@@ -4709,6 +4786,7 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     int nInliersMono = 0;
     int nInliersStereo = 0;
     int nInliers = 0;
+    // 开始执行4次优化
     for(size_t it=0; it<4; it++)
     {
         optimizer.initializeOptimization(0);
@@ -4796,6 +4874,7 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     }
 
     // If not too much tracks, recover not too bad points
+    // 优化之后，通过一系列操作，获得优化后的位姿以及内点个数
     if ((nInliers<30) && !bRecInit)
     {
         nBad=0;
@@ -4875,8 +4954,11 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     return nInitialCorrespondences-nBad;
 }
 
+// 与PoseOptimization()函数相比，其不同之处主要在于IMU信息的引入，但主要流程相同
+// 对普通帧pFrame进行优化
 int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
 {
+    // 对优化器进行初始化
     g2o::SparseOptimizer optimizer;
     g2o::BlockSolverX::LinearSolverType * linearSolver;
 
@@ -4893,26 +4975,33 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     int nInitialCorrespondences=0;
 
     // Set Current Frame vertex
+    // 设置帧节点
+    // 增加位姿节点(VertexPose)
     VertexPose* VP = new VertexPose(pFrame);
     VP->setId(0);
     VP->setFixed(false);
     optimizer.addVertex(VP);
+    // 速度节点(VertexVelocity)
     VertexVelocity* VV = new VertexVelocity(pFrame);
     VV->setId(1);
     VV->setFixed(false);
     optimizer.addVertex(VV);
+    // 陀螺仪偏置节点(VertexGyroBias)
     VertexGyroBias* VG = new VertexGyroBias(pFrame);
     VG->setId(2);
     VG->setFixed(false);
     optimizer.addVertex(VG);
+    // 加速度偏置节点(VertexAccBias)
     VertexAccBias* VA = new VertexAccBias(pFrame);
     VA->setId(3);
     VA->setFixed(false);
     optimizer.addVertex(VA);
 
     // Set MapPoint vertices
+    // 设置MapPoint节点
     const int N = pFrame->N;
     const int Nleft = pFrame->Nleft;
+    // bRight == true 意味着Nleft！=-1，是鱼眼双目情况
     const bool bRight = (Nleft!=-1);
 
     vector<EdgeMonoOnlyPose*> vpEdgesMono;
@@ -4927,25 +5016,34 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     const float thHuberMono = sqrt(5.991);
     const float thHuberStereo = sqrt(7.815);
 
+    // 针对不同相机模型分支添加MapPoint节点与观测边
     {
         unique_lock<mutex> lock(MapPoint::mGlobalMutex);
 
+        // 对于每一个地图点，逐个进行判断。如果其不为NULL，进行下一步判断
         for(int i=0; i<N; i++)
         {
             MapPoint* pMP = pFrame->mvpMapPoints[i];
             if(pMP)
             {
                 cv::KeyPoint kpUn;
+                // 如果是单目或者是广角的左相机、双目的右相机、广角的右相机，就分别进入不同分支
                 // Left monocular observation
                 // 这里说的Left monocular包含两种情况：1.单目情况 2.两个相机情况下的相机1
+                // bRight == true 意味着Nleft！=-1，是鱼眼双目情况； 
+                // bRight == false 意味着可能是Pinhole情况或鱼眼单目情况，加上&&mvuRight[i]<0则表明是单目情况
+                // Nleft！=-1说明是鱼眼双目的情况，因此i < Nleft意味着鱼眼双目情况下的左相机
                 if((!bRight && pFrame->mvuRight[i]<0) || i < Nleft)
                 {
                     //如果是两个相机情况下的相机1
+                    // 如果是双目鱼眼情况下的左相机，使用mvKeys
                     if(i < Nleft) // pair left-right
                         kpUn = pFrame->mvKeys[i];
                     else
+                    // 如果是pinhole单目情况，使用mvKeysUn
                         kpUn = pFrame->mvKeysUn[i];
 
+                    // 添加MapPoint节点与观测边
                     nInitialMonoCorrespondences++;
                     pFrame->mvbOutlier[i] = false;
 
@@ -4973,6 +5071,8 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
                     vnIndexEdgeMono.push_back(i);
                 }
                 // Stereo observation
+                // bRight == false 意味着可能是Pinhole情况或鱼眼单目情况，由于单目已在上一个分支讨论了，因此这里是pinhole双目情况
+                // 对于Pinhole双目情况，添加MapPoint节点与观测边
                 else if(!bRight)
                 {
                     nInitialStereoCorrespondences++;
@@ -5005,6 +5105,8 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
                 }
 
                 // Right monocular observation
+                // 对于鱼眼双目情况下的右相机，添加MapPoint节点与观测边
+                // 鱼眼双目被视为独立的左右单目相机，因此所谓的右单目相机指的是鱼眼双目的右相机
                 if(bRight && i >= Nleft)
                 {
                     nInitialMonoCorrespondences++;
@@ -5041,6 +5143,7 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     nInitialCorrespondences = nInitialMonoCorrespondences + nInitialStereoCorrespondences;
 
     // Set Previous Frame Vertex
+    // 设置上一帧节点
     Frame* pFp = pFrame->mpPrevFrame;
 
     VertexPose* VPk = new VertexPose(pFp);
@@ -5060,6 +5163,7 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     VAk->setFixed(false);
     optimizer.addVertex(VAk);
 
+    // 添加IMU预积分边
     EdgeInertial* ei = new EdgeInertial(pFrame->mpImuPreintegratedFrame);
 
     ei->setVertex(0, VPk);
@@ -5070,6 +5174,7 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     ei->setVertex(5, VV);
     optimizer.addEdge(ei);
 
+    // 添加陀螺仪边
     EdgeGyroRW* egr = new EdgeGyroRW();
     egr->setVertex(0,VGk);
     egr->setVertex(1,VG);
@@ -5077,6 +5182,7 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     egr->setInformation(InfoG);
     optimizer.addEdge(egr);
 
+    // 添加加速度边
     EdgeAccRW* ear = new EdgeAccRW();
     ear->setVertex(0,VAk);
     ear->setVertex(1,VA);
@@ -5087,6 +5193,7 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     if (!pFp->mpcpi)
         Verbose::PrintMess("pFp->mpcpi does not exist!!!\nPrevious Frame " + to_string(pFp->mnId), Verbose::VERBOSITY_NORMAL);
 
+    // 添加IMU位姿约束边
     EdgePriorPoseImu* ep = new EdgePriorPoseImu(pFp->mpcpi);
 
     ep->setVertex(0,VPk);
@@ -5110,6 +5217,7 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     int nInliersMono = 0;
     int nInliersStereo = 0;
     int nInliers=0;
+    // 进行4次优化
     for(size_t it=0; it<4; it++)
     {
         optimizer.initializeOptimization(0);
@@ -5123,6 +5231,8 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
         nInliersStereo=0;
         float chi2close = 1.5*chi2Mono[it];
 
+        // 对于不同的情况，分别计算不同的误差
+        // 单目情况
         for(size_t i=0, iend=vpEdgesMono.size(); i<iend; i++)
         {
             EdgeMonoOnlyPose* e = vpEdgesMono[i];
@@ -5155,6 +5265,7 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
 
         }
 
+        // 对于双目情况，计算误差
         for(size_t i=0, iend=vpEdgesStereo.size(); i<iend; i++)
         {
             EdgeStereoOnlyPose* e = vpEdgesStereo[i];
@@ -5229,6 +5340,7 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
 
 
     // Recover optimized pose, velocity and biases
+    // 优化完成后，恢复优化的位姿
     pFrame->SetImuPoseVelocity(VP->estimate().Rwb.cast<float>(), VP->estimate().twb.cast<float>(), VV->estimate().cast<float>());
     Vector6d b;
     b << VG->estimate(), VA->estimate();

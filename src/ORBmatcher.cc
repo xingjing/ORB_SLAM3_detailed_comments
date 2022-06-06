@@ -261,7 +261,8 @@ namespace ORB_SLAM3
         // 获取该关键帧的地图点
         const vector<MapPoint*> vpMapPointsKF = pKF->GetMapPointMatches();
 
-        // 和普通帧F特征点的索引一致
+        // 将传入的vpMapPointMatches全部置为NULL，个数等于Frame帧的特征个数N，和普通帧F特征点的索引一致
+        // 后续只有认为是匹配的地图点才会有MapPoint指针，否则都为NULL
         vpMapPointMatches = vector<MapPoint*>(F.N,static_cast<MapPoint*>(NULL));
 
         // 取出关键帧的词袋特征向量

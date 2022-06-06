@@ -40,7 +40,7 @@ MapPoint::MapPoint():
 }
 
 /** 
- * @brief 构造函数
+ * @brief MapPoint构造函数：系统初始化时使用
  */
 MapPoint::MapPoint(const Eigen::Vector3f &Pos, KeyFrame *pRefKF, Map* pMap):
     mnFirstKFid(pRefKF->mnId), mnFirstFrame(pRefKF->mnFrameId), nObs(0), mnTrackReferenceForFrame(0),

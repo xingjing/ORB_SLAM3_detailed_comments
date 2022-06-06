@@ -616,6 +616,7 @@ Eigen::Matrix<float,3,3> Frame::GetImuRotation() {
  * @brief 获得imu的位姿
  */
 Sophus::SE3<float> Frame::GetImuPose() {
+    // 计算Twb：Tcw^-1 * Tcb = Twc*Tcb = Twb
     return mTcw.inverse() * mImuCalib.mTcb;
 }
 
@@ -1399,6 +1400,7 @@ bool Frame::UnprojectStereo(const int &i, Eigen::Vector3f &x3D)
     if(z>0) {
         const float u = mvKeysUn[i].pt.x;
         const float v = mvKeysUn[i].pt.y;
+        // 将2D的特征像素坐标转化为相机坐标系下的3D坐标的x、y分量
         const float x = (u-cx)*z*invfx;
         const float y = (v-cy)*z*invfy;
         Eigen::Vector3f x3Dc(x, y, z);
