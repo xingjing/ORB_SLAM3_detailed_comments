@@ -273,6 +273,7 @@ namespace ORB_SLAM3 {
         }
     }
 
+    // 读取双目相机模式下的第二个相机参数
     void Settings::readCamera2(cv::FileStorage &fSettings) {
         bool found;
         vector<float> vCalibration;
@@ -315,6 +316,7 @@ namespace ORB_SLAM3 {
             float cx = readParameter<float>(fSettings,"Camera2.cx",found);
             float cy = readParameter<float>(fSettings,"Camera2.cy",found);
 
+            // ! 参数读取BUG,此处应为读入Camera2的参数
             float k0 = readParameter<float>(fSettings,"Camera1.k1",found);
             float k1 = readParameter<float>(fSettings,"Camera1.k2",found);
             float k2 = readParameter<float>(fSettings,"Camera1.k3",found);
@@ -503,6 +505,16 @@ namespace ORB_SLAM3 {
                           R12, t12,
                           R_r1_u1,R_r2_u2,P1,P2,Q,
                           cv::CALIB_ZERO_DISPARITY,-1,newImSize_);
+
+        // 计算无畸变和修正转换关系
+        // cameraMatrix——输入的摄像头内参数矩阵（3X3矩阵）
+        // distCoeffs——输入的摄像头畸变系数矩阵（5X1矩阵）
+        // R——输入的第一和第二摄像头坐标系之间的旋转矩阵
+        // newCameraMatrix——输入的校正后的3X3摄像机矩阵
+        // size——摄像头采集的无失真图像尺寸
+        // m1type——map1的数据类型，可以是CV_32FC1或CV_16SC2
+        // map1——输出的X坐标重映射参数
+        // map2——输出的Y坐标重映射参数
         cv::initUndistortRectifyMap(K1, camera1DistortionCoef(), R_r1_u1, P1.rowRange(0, 3).colRange(0, 3),
                                     newImSize_, CV_32F, M1l_, M2l_);
         cv::initUndistortRectifyMap(K2, camera2DistortionCoef(), R_r2_u2, P2.rowRange(0, 3).colRange(0, 3),

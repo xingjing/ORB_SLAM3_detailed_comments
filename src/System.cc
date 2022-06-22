@@ -284,11 +284,25 @@ Sophus::SE3f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, 
 
     cv::Mat imLeftToFeed, imRightToFeed;
     if(settings_ && settings_->needToRectify()){
+        // 仅在相机为pinhole模式才启用
         cv::Mat M1l = settings_->M1l();
         cv::Mat M2l = settings_->M2l();
         cv::Mat M1r = settings_->M1r();
         cv::Mat M2r = settings_->M2r();
 
+        // 将一幅图像中某位置的像素放置到另一个图片指定位置
+        // 配合cv：：initUndistortRectifyMap 使用
+        // src——输入图像，即原图像，需要单通道8位或者浮点类型的图像
+        // dst(c++)——输出图像，即目标图像，需和原图形一样的尺寸和类型
+        // map1——它有两种可能表示的对象：（1）表示点（x,y）的第一个映射；（2）表示CV_16SC2，CV_32FC1等
+        // map2——有两种可能表示的对象：（1）若map1表示点（x,y）时，这个参数不代表任何值；（2）表示 CV_16UC1，CV_32FC1类型的Y值
+        // intermap2polation——插值方式，有四中插值方式：
+        // （1）INTER_NEAREST——最近邻插值
+        // （2）INTER_LINEAR——双线性插值（默认）
+        // （3）INTER_CUBIC——双三样条插值（默认）
+        // （4）INTER_LANCZOS4——lanczos插值（默认）
+        // intborderMode——边界模式，默认BORDER_CONSTANT
+        // borderValue——边界颜色，默认Scalar()黑色
         cv::remap(imLeft, imLeftToFeed, M1l, M2l, cv::INTER_LINEAR);
         cv::remap(imRight, imRightToFeed, M1r, M2r, cv::INTER_LINEAR);
     }
