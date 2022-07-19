@@ -292,6 +292,7 @@ public:
     vector<float> mvInvLevelSigma2;
 
     // Undistorted Image Bounds (computed once).
+    // 根据原始图像四个边界点的坐标，计算畸变校正后的四个边界点坐标，并取最大外接矩形
     static float mnMinX;
     static float mnMaxX;
     static float mnMinY;

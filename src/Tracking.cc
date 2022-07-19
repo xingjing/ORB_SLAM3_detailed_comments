@@ -1585,6 +1585,7 @@ Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat 
 
     //cout << "Incoming frame creation" << endl;
     // 双目模式，注意跟两个相机模式区分开
+    // pinhole 双目模式
     if (mSensor == System::STEREO && !mpCamera2)
         mCurrentFrame = Frame(
             mImGray,                // 左目图像
@@ -1599,7 +1600,21 @@ Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat 
             mThDepth,				// 远点,近点的区分阈值
             mpCamera);				// 相机模型
     else if(mSensor == System::STEREO && mpCamera2)
-        mCurrentFrame = Frame(mImGray,imGrayRight,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,mpCamera2,mTlr);
+    // fisheye 双目模式
+        mCurrentFrame = Frame(
+            mImGray,
+            imGrayRight,
+            timestamp,
+            mpORBextractorLeft,
+            mpORBextractorRight,
+            mpORBVocabulary,
+            mK,
+            mDistCoef,
+            mbf,
+            mThDepth,
+            mpCamera,
+            mpCamera2,
+            mTlr);
     else if(mSensor == System::IMU_STEREO && !mpCamera2)
         mCurrentFrame = Frame(mImGray,imGrayRight,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,&mLastFrame,*mpImuCalib);
     else if(mSensor == System::IMU_STEREO && mpCamera2)

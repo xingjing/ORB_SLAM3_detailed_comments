@@ -1054,6 +1054,7 @@ void Frame::UndistortKeyPoints()
 
 /**
  * @brief 计算去畸变图像的边界
+ * 根据原始图像四个边界点的坐标，计算畸变校正后的四个边界点坐标，并取最大外接矩形
  * 
  * @param[in] imLeft            需要计算边界的图像
  */
@@ -1071,6 +1072,7 @@ void Frame::ComputeImageBounds(const cv::Mat &imLeft)
 
         // 和前面校正特征点一样的操作，将这几个边界点作为输入进行校正
         mat=mat.reshape(2);
+        // 根据相机参数和观测到点坐标位置计算实际坐标位置
         cv::undistortPoints(mat,mat,static_cast<Pinhole*>(mpCamera)->toK(),mDistCoef,cv::Mat(),mK);
         mat=mat.reshape(1);
 
@@ -1480,9 +1482,12 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     // This is done only for the first Frame (or after a change in the calibration)
     if(mbInitialComputations)
     {
+        // 根据原始图像四个边界点的坐标，计算畸变校正后的四个边界点坐标，并取最大外接矩形
         ComputeImageBounds(imLeft);
 
+        // 表示一个图像像素相当于多少个图像网格列（宽）
         mfGridElementWidthInv=static_cast<float>(FRAME_GRID_COLS)/(mnMaxX-mnMinX);
+        // 表示一个图像像素相当于多少个图像网格行（高）
         mfGridElementHeightInv=static_cast<float>(FRAME_GRID_ROWS)/(mnMaxY-mnMinY);
 
         fx = K.at<float>(0,0);
@@ -1492,6 +1497,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
         invfx = 1.0f/fx;
         invfy = 1.0f/fy;
 
+        // 特殊的初始化过程完成，标志复位
         mbInitialComputations=false;
     }
 
