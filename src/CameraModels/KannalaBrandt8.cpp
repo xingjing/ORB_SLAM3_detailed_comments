@@ -289,6 +289,7 @@ bool KannalaBrandt8::ReconstructWithTwoViews(
     cv::Mat D = (cv::Mat_<float>(4, 1) << mvParameters[4], mvParameters[5], mvParameters[6], mvParameters[7]);
     cv::Mat R = cv::Mat::eye(3, 3, CV_32F);
     cv::Mat K = this->toK();
+    // 鱼眼模式在此处进行畸变矫正，而非Frame.cc中
     cv::fisheye::undistortPoints(vPts1, vPts1, K, D, R, K);
     cv::fisheye::undistortPoints(vPts2, vPts2, K, D, R, K);
 

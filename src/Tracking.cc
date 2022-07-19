@@ -563,7 +563,9 @@ Tracking::~Tracking()
  */
 void Tracking::newParameterLoader(Settings *settings) {
     // 1. 读取相机1
+    // 从yaml文件中读取相机1
     mpCamera = settings->camera1();
+    // 遍历Atlas地图中现有的相机看看跟输入的相机一不一样，不一样的话则向mvpCameras添加
     mpCamera = mpAtlas->AddCamera(mpCamera);
 
     if(settings->needToUndistort()){
@@ -591,7 +593,9 @@ void Tracking::newParameterLoader(Settings *settings) {
     // 读取相机2
     if((mSensor==System::STEREO || mSensor==System::IMU_STEREO || mSensor==System::IMU_RGBD) &&
         settings->cameraType() == Settings::KannalaBrandt){
+        // 从yaml文件中读取相机1
         mpCamera2 = settings->camera2();
+        // 遍历Atlas地图中现有的相机看看跟输入的相机一不一样，不一样的话则向mvpCameras添加
         mpCamera2 = mpAtlas->AddCamera(mpCamera2);
 
         mTlr = settings->Tlr();

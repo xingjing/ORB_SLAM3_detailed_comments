@@ -1005,6 +1005,7 @@ void Frame::UndistortKeyPoints()
 {
     // Step 1 如果第一个畸变参数为0，不需要矫正。第一个畸变参数k1是最重要的，一般不为0，为0的话，说明畸变参数都是0
 	// 变量mDistCoef中存储了opencv指定格式的去畸变参数，格式为：(k1,k2,p1,p2,k3)
+    // fisheye模式没有mDistCoef，不进行畸变矫正，此处直接将mvKeys赋给mvKeysUn
     if(mDistCoef.at<float>(0)==0.0)
     {
         mvKeysUn=mvKeys;
