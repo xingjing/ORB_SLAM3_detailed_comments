@@ -2306,6 +2306,7 @@ void Tracking::Track()
         {
             // Localization Mode: Local Mapping is deactivated (TODO Not available in inertial mode)
             // 只进行跟踪tracking，局部地图不工作
+            // !XJ 当前流程下永远不会进入LOST状态
             if(mState==LOST)
             {
                 if(mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
@@ -2624,6 +2625,7 @@ void Tracking::Track()
             // 但是估计下一帧位姿的时候我们不想用这些外点，所以删掉
 
             //  Step 9.5 删除那些在BA中检测为外点的地图点  
+            // !XJ TODO 有待进一步判断在纯定位模式下是否也删除地图点
             for(int i=0; i<mCurrentFrame.N;i++)
             {
                 if(mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])

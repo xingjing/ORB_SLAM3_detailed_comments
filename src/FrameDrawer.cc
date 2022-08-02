@@ -55,7 +55,9 @@ cv::Mat FrameDrawer::DrawFrame(float imageScale)
     map<long unsigned int, cv::Point2f> mProjectPoints;
     map<long unsigned int, cv::Point2f> mMatchedInImage;
 
+    // 正常SLAM模式下跟踪的图像特征点颜色，绿色
     cv::Scalar standardColor(0,255,0);
+    // 纯定位模式下跟踪的图像特征点颜色，蓝色
     cv::Scalar odometryColor(255,0,0);
 
     //Copy variables within scoped mutex
@@ -187,6 +189,7 @@ cv::Mat FrameDrawer::DrawFrame(float imageScale)
                 }
                 else // This is match to a "visual odometry" MapPoint created in the last frame
                 {
+                    // TODO 待确认：将纯定位模式下上一普通帧的地图点在图像上对应的特征点显示为蓝色
                     cv::rectangle(im,pt1,pt2,odometryColor);
                     cv::circle(im,point,2,odometryColor,-1);
                     mnTrackedVO++;

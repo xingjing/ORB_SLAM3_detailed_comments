@@ -1007,7 +1007,7 @@ void KeyFrame::PreSave(set<KeyFrame *> &spKF, set<MapPoint *> &spMP, set<Geometr
 {
     // Save the id of each MapPoint in this KF, there can be null pointer in the vector
     mvBackupMapPointsId.clear();
-    mvBackupMapPointsId.reserve(N);
+    mvBackupMapPointsId.reserve(N);//N: Number of KeyPoints
     for (int i = 0; i < N; ++i)
     {
 
