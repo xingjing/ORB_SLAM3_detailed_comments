@@ -1585,6 +1585,7 @@ void LoopClosing::CorrectLoop()
  */
 void LoopClosing::MergeLocal()
 {
+    cout << "[LoopClosing::MergeLocal]: Start MergeLocal..." << endl;
     // 窗口内共视关键帧的数量， 上个0.4版本是15
     int numTemporalKFs = 25; //Temporal KFs in the local window if the map is inertial.
 
@@ -2297,6 +2298,7 @@ void LoopClosing::MergeLocal()
 
     // altas移除不好的地图
     mpAtlas->RemoveBadMaps();
+    cout << "[LoopClosing::MergeLocal]: End MergeLocal" << endl;
 
 }
 

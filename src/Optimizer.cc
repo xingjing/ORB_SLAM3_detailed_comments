@@ -1068,7 +1068,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
         // 单目的边，对每条边都计算误差
         nBad=0;
         for(size_t i=0, iend=vpEdgesMono.size(); i<iend; i++)
-        {
+        
             ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose* e = vpEdgesMono[i];
 
             const size_t idx = vnIndexEdgeMono[i];
