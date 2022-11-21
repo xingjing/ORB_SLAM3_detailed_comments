@@ -343,7 +343,7 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
     AssignFeaturesToGrid();
 }
 
-// pinhole单目模式
+// pinhole单目模式（fisheye单目模式）
 Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, GeometricCamera* pCamera, cv::Mat &distCoef, const float &bf, const float &thDepth, Frame* pPrevF, const IMU::Calib &ImuCalib)
     :mpcpi(NULL),mpORBvocabulary(voc),mpORBextractorLeft(extractor),mpORBextractorRight(static_cast<ORBextractor*>(NULL)),
      mTimeStamp(timeStamp), mK(static_cast<Pinhole*>(pCamera)->toK()), mK_(static_cast<Pinhole*>(pCamera)->toK_()), mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth),
@@ -377,6 +377,7 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
 #endif
 
     // Step 3 对这个单目图像进行提取特征点, 第一个参数0-左图， 1-右图
+    // TODO-xj 此处vLappingArea[1]=1000 取为固定值感觉有问题
     ExtractORB(0,imGray,0,1000);
 
 #ifdef REGISTER_TIMES
@@ -1541,6 +1542,7 @@ void Frame::ComputeStereoFishEyeMatches()
 {
     // 1. 分别取出特征点
     //Speed it up by matching keypoints in the lapping area
+    // monoLeft--左目提取特征点数量； monoRight--右目提取特征点数量
     vector<cv::KeyPoint> stereoLeft(mvKeys.begin() + monoLeft, mvKeys.end());
     vector<cv::KeyPoint> stereoRight(mvKeysRight.begin() + monoRight, mvKeysRight.end());
 
@@ -1566,6 +1568,9 @@ void Frame::ComputeStereoFishEyeMatches()
     int nMatches = 0;
     int descMatches = 0;
 
+    // ? 索引中为何要加monoLeft、monoRight
+    // 答：mDescriptors中前monoLeft部分存储的是双目鱼眼非共视区域的特征点，之后的部分才是共视区域的特征点
+    // 只有共视区域的特征点才能进行三角化得到地图点在相机坐标系下的3D坐标
     //Check matches using Lowe's ratio
     for(vector<vector<cv::DMatch>>::iterator it = matches.begin(); it != matches.end(); ++it)
     {
@@ -1587,6 +1592,7 @@ void Frame::ComputeStereoFishEyeMatches()
             // 填充数据
             if(depth > 0.0001f)
             {
+                
                 mvLeftToRightMatch[(*it)[0].queryIdx + monoLeft] = (*it)[0].trainIdx + monoRight;
                 mvRightToLeftMatch[(*it)[0].trainIdx + monoRight] = (*it)[0].queryIdx + monoLeft;
                 mvStereo3Dpoints[(*it)[0].queryIdx + monoLeft] = p3D;

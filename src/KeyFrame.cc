@@ -334,6 +334,9 @@ int KeyFrame::GetNumberMPs()
     return numberMPs;
 }
 
+// Add MapPoint to KeyFrame
+// 通过传入的索引idx将对应的MapPoint赋给mvpMapPoints
+// 建立MapPoint与Frame/KeyFrame之间的双向联系
 void KeyFrame::AddMapPoint(MapPoint *pMP, const size_t &idx)
 {
     unique_lock<mutex> lock(mMutexFeatures);

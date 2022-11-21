@@ -2800,9 +2800,12 @@ void Tracking::StereoInitialization()
             }
         } else{
             // KannalaBrandt8双目的情况：
+            // 遍历所有左目特征点
             for(int i = 0; i < mCurrentFrame.Nleft; i++){
-                int rightIndex = mCurrentFrame.mvLeftToRightMatch[i];
+                int rightIndex = mCurrentFrame.=[i];
+                // 只有存在对应右目特征点的才会被构造地图点
                 if(rightIndex != -1){
+                    // ComputeStereoFishEyeMatches根据共视区域里的左右目匹配对计算得到的3D坐标
                     Eigen::Vector3f x3D = mCurrentFrame.mvStereo3Dpoints[i];
 
                     MapPoint* pNewMP = new MapPoint(x3D, pKFini, mpAtlas->GetCurrentMap());

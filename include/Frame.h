@@ -349,6 +349,7 @@ public:
 
     //Triangulated stereo observations using as reference the left camera. These are
     //computed during ComputeStereoFishEyeMatches
+    // 在鱼眼双目模式中通过双目三角化计算得到的左目相机坐标系下的特征点3D坐标
     std::vector<Eigen::Vector3f> mvStereo3Dpoints;
 
     //Grid for the right image
