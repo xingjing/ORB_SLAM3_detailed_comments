@@ -826,22 +826,26 @@ void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const l
 // 这里优化图中只有一个节点，因此，边就是一个一元边(Unary Edge)，也就是只连接到一个节点(或者理解为从自己指向自己)
 int Optimizer::PoseOptimization(Frame *pFrame)
 {
-    // 构造求解器，并对其进行一系列初始化
+    // step1. 构造求解器，并对其进行一系列初始化
     g2o::SparseOptimizer optimizer;
     g2o::BlockSolver_6_3::LinearSolverType * linearSolver;
 
     linearSolver = new g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>();
 
     // 新建一个稀疏优化器
+    // BlockSolver_6_3表示：位姿 _PoseDim 为6维，路标点 _LandmarkDim 是3维
     g2o::BlockSolver_6_3 * solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
 
     // 将优化算法设置为Levenberg
     g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
     optimizer.setAlgorithm(solver);
 
+    // 输入的帧中,有效的,参与优化过程的2D-3D点对
     int nInitialCorrespondences=0;
 
     // Set Frame vertex
+    // step2. 构建优化图
+    // step2.1 添加顶点
     // 将输入的影像帧Frame作为优化的一个节点
     g2o::VertexSE3Expmap * vSE3 = new g2o::VertexSE3Expmap();
     // 将节点的初值设置为传入帧的估计位姿
@@ -855,6 +859,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     // 将构造好的节点添加到优化器中
     optimizer.addVertex(vSE3);
 
+    // step2.2 添加边
     // Set MapPoint vertices
     // 根据影像帧所对应的地图点添加节点并且将其和刚刚添加的帧节点进行连接
     const int N = pFrame->N;//获取当前帧提取的ORB特征点的个数
@@ -863,6 +868,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     // 如果是双目模式，如果某个特征点双目匹配成功、有对应的地图点，那么这个地图点就会被构建双目边；
     // 如果左目影像中的特征点在右目影像中没有对应，那么就建立单目边
     vector<ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose*> vpEdgesMono;
+    // 鱼眼相机右目的边添加到vpEdgeMono_FHR，FHR可以理解为fisheye_right的意思
     vector<ORB_SLAM3::EdgeSE3ProjectXYZOnlyPoseToBody *> vpEdgesMono_FHR;
     vector<size_t> vnIndexEdgeMono, vnIndexEdgeRight;
     vpEdgesMono.reserve(N);
@@ -890,29 +896,32 @@ int Optimizer::PoseOptimization(Frame *pFrame)
         if(pMP)
         {
             //Conventional SLAM
-            // 传统相机，非鱼眼双目的情况
+            // 传统相机单双目，非鱼眼双目的情况
             if(!pFrame->mpCamera2){
                 // Monocular observation
-                // 单目情况
-                if(pFrame->mvuRight[i]<0)//pFrame->mvuRight[i]：根据索引，获取某个地图点对应右目图像上的横坐标(针对双目情况，该值默认为-1)
+                // 单目情况，单目的mvuRight[i]<0
+                if(pFrame->mvuRight[i]<0)//pFrame->mvuRight[i]：根据索引，获取某个地图点对应右目图像上的横坐标(针对单目情况，该值默认为-1)
                 {
+                    // 输入的帧中,有效的,参与优化过程的2D-3D点对计数
                     nInitialCorrespondences++;
                     pFrame->mvbOutlier[i] = false;
 
-                    // 获取到该地图点的观测，也就是其在影像上对应的像素坐标x、y，二维向量
+                    // 获取到该地图点的观测，也就是其在影像上对应的像素坐标x、y，二维列向量
                     Eigen::Matrix<double,2,1> obs;
                     const cv::KeyPoint &kpUn = pFrame->mvKeysUn[i];//pFrame->mvKeysUn[i]:根据索引，获取某个cv::KeyPoint类型的特征点对象
                     obs << kpUn.pt.x, kpUn.pt.y;
 
                     // 新建一个边对象
-                    // 对于单目而言，我们构建的是g2o::EdgeSE3ProjectXYZOnlyPose类型的边，表达将地图点投影到相机坐标系下的相机平面
+                    // 对于单目而言，ORB-SLAM2构建的是g2o::EdgeSE3ProjectXYZOnlyPose类型的边，表达将地图点投影到相机坐标系下的相机平面
+                    // ORB-SLAM3自定义了一部分内容
                     ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose* e = new ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose();
 
                     // 将刚刚的观测添加到该边
                     e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
                     e->setMeasurement(obs);//设置地图点观测(误差计算其实就是和观测有关的)
                     // 设置信息矩阵
-                    const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];//pFrame->mvInvLevelSigma2[kpUn.octave]:根据特征点所在金字塔层数获取对应的sigma值
+                    //pFrame->mvInvLevelSigma2[kpUn.octave]:根据特征点所在金字塔层数获取对应的sigma值
+                    const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
                     e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
 
                     // 设置RobustKernel、Dalta
@@ -921,6 +930,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                     rk->setDelta(deltaMono);
 
                     // 设置该条边对应的相机模型、地图点的世界坐标
+                    // 此处直接用的pFrame->mpCamera
                     e->pCamera = pFrame->mpCamera;
                     e->Xw = pMP->GetWorldPos().cast<double>();
 
@@ -937,13 +947,15 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                     // 首先还是获取到该地图点对应的像素坐标，然后构造边。
                     // 之后设置该边的一系列观测、信息矩阵、RobustKernel、Delta、相机的内参(fx、fy、cx、cy)、双目基线(bf)以及该地图点的世界坐标(Xw)。
                     // 然后将其添加到优化器中，同时为便于管理，也将其放到vpEdgesStereo中
+
+                    // 输入的帧中,有效的,参与优化过程的2D-3D点对计数
                     nInitialCorrespondences++;
                     pFrame->mvbOutlier[i] = false;
 
-                    // 相比于单目的观测，双目的观测是一个三维向量，增加了pFrame->mvuRight[i]
+                    // 相比于单目的观测，双目的观测是一个三维列向量，增加了pFrame->mvuRight[i]
                     Eigen::Matrix<double,3,1> obs;
                     const cv::KeyPoint &kpUn = pFrame->mvKeysUn[i];
-                    const float &kp_ur = pFrame->mvuRight[i];
+                    const float &kp_ur = pFrame->mvuRight[i];// 右目中与左目特征点对应的x坐标值
                     obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
 
                     // 双目构建的是g2o::EdgeStereoSE3ProjectXYZOnlyPose类型的边
@@ -959,6 +971,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                     e->setRobustKernel(rk);
                     rk->setDelta(deltaStereo);
 
+                    // 此处是逐一传入相机内参，应该是继承了ORB-SLAM2中的写法
                     e->fx = pFrame->fx;//获取储存在Frame类中的相机内参(双目的话多一个mbf)
                     e->fy = pFrame->fy;
                     e->cx = pFrame->cx;
@@ -974,6 +987,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
             }
             //SLAM with respect a rigid body
             else{// 鱼眼双目的情况
+            // 输入的帧中,有效的,参与优化过程的2D-3D点对计数
                 nInitialCorrespondences++;
 
                 cv::KeyPoint kpUn;
@@ -982,10 +996,12 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                 // 获取地图点的观测、新建边、向边添加观测、信息矩阵、RobustKernel、Delta、相机模型、世界坐标。
                 // 然后添加地图点的世界坐标。最后，向优化器中添加边，并且将其添加到vpEdgesMono中
                 if (i < pFrame->Nleft) {    //Left camera observation
+                    // 对于鱼眼左目
                     kpUn = pFrame->mvKeys[i];
 
                     pFrame->mvbOutlier[i] = false;//pFrame->mvbOutlier[i]:根据索引，获取某个地图点是否是离群点的flag(该值默认为false)
 
+                    // 二维列向量
                     Eigen::Matrix<double, 2, 1> obs;
                     obs << kpUn.pt.x, kpUn.pt.y;
 
@@ -1000,6 +1016,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                     e->setRobustKernel(rk);
                     rk->setDelta(deltaMono);
 
+                    // 相机模型直接使用的pFrame->mpCamera
                     e->pCamera = pFrame->mpCamera;
                     e->Xw = pMP->GetWorldPos().cast<double>();
 
@@ -1009,7 +1026,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                     vnIndexEdgeMono.push_back(i);
                 }
                 else {
-                    // 右相机的观测
+                    // 鱼眼双目右相机的观测
                     // 总流程与左相机类似，唯一不同是将边添加到vpEdgeMono_FHR
                     kpUn = pFrame->mvKeysRight[i - pFrame->Nleft];
 
@@ -1044,6 +1061,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     }
     }
 
+    // 有效点对数量少
     if(nInitialCorrespondences<3)
         return 0;
 
@@ -1056,47 +1074,58 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     const float chi2Stereo[4]={7.815,7.815,7.815, 7.815};
     const int its[4]={10,10,10,10};//每次优化包含10次迭代
 
+    // bad的地图点计数
     int nBad=0;
+    // 开始四次优化
     for(size_t it=0; it<4; it++)
     {
         Tcw = pFrame->GetPose();
         vSE3->setEstimate(g2o::SE3Quat(Tcw.unit_quaternion().cast<double>(),Tcw.translation().cast<double>()));
 
+        // 其实就是初始化优化器,这里的参数0就算是不填写,默认也是0,也就是只对level为0的边进行优化
         optimizer.initializeOptimization(0);
+        // 开始优化，优化10次
         optimizer.optimize(its[it]);
 
-        // 单目的边，对每条边都计算误差
         nBad=0;
+        // 优化结束,开始遍历参与优化的每一条误差边(单目，包括Pinhole单目、鱼眼单目、鱼眼双目的左目)
         for(size_t i=0, iend=vpEdgesMono.size(); i<iend; i++)
         {
             ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose* e = vpEdgesMono[i];
 
             const size_t idx = vnIndexEdgeMono[i];
 
+            // 如果这条误差边是来自于outlier
             if(pFrame->mvbOutlier[idx])
             {
                 e->computeError();
             }
 
+            // 就是error*\Omega*error,表征了这个点的误差大小(考虑置信度以后)
             const float chi2 = e->chi2();
 
             if(chi2>chi2Mono[it])
-            {                
+            {   
+                // 设置为outlier , level 1 对应为外点,上面的过程中我们设置其为不优化
                 pFrame->mvbOutlier[idx]=true;
                 e->setLevel(1);
+                // bad的地图点计数++
                 nBad++;
             }
             else
             {
+                // 设置为inlier, level 0 对应为内点,上面的过程中我们就是要优化这些关系
                 pFrame->mvbOutlier[idx]=false;
                 e->setLevel(0);
             }
 
+            // 除了前两次优化需要RobustKernel以外, 其余的优化都不需要 -- 因为重投影的误差已经有明显的下降了
             if(it==2)
                 e->setRobustKernel(0);
         }
 
-        // 对于鱼眼相机的右相机，也添加边
+        // 对于鱼眼相机的右相机，也添加边（鱼眼相机的左相机则使用以上单目的情况）
+        // 遍历鱼眼右目的边
         for(size_t i=0, iend=vpEdgesMono_FHR.size(); i<iend; i++)
         {
             ORB_SLAM3::EdgeSE3ProjectXYZOnlyPoseToBody* e = vpEdgesMono_FHR[i];
@@ -1126,7 +1155,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                 e->setRobustKernel(0);
         }
 
-        // 对于双目相机，添加边
+        // 对于pinhole双目相机，添加边
         for(size_t i=0, iend=vpEdgesStereo.size(); i<iend; i++)
         {
             g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = vpEdgesStereo[i];
@@ -1158,7 +1187,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
 
         if(optimizer.edges().size()<10)
             break;
-    }    
+    }//完成四次优化    
 
     // 最后，将优化后的位姿重新赋给传入的影像帧Frame，并且返回内点的个数，完成优化
     // Recover optimized pose and return number of inliers
