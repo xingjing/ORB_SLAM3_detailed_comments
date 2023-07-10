@@ -2306,6 +2306,7 @@ void Tracking::Track()
         {
             // Localization Mode: Local Mapping is deactivated (TODO Not available in inertial mode)
             // 只进行跟踪tracking，局部地图不工作
+            // !XJ 当前流程下永远不会进入LOST状态
             if(mState==LOST)
             {
                 if(mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
@@ -2624,6 +2625,7 @@ void Tracking::Track()
             // 但是估计下一帧位姿的时候我们不想用这些外点，所以删掉
 
             //  Step 9.5 删除那些在BA中检测为外点的地图点  
+            // !XJ TODO 有待进一步判断在纯定位模式下是否也删除地图点
             for(int i=0; i<mCurrentFrame.N;i++)
             {
                 if(mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])
@@ -2798,9 +2800,12 @@ void Tracking::StereoInitialization()
             }
         } else{
             // KannalaBrandt8双目的情况：
+            // 遍历所有左目特征点
             for(int i = 0; i < mCurrentFrame.Nleft; i++){
-                int rightIndex = mCurrentFrame.mvLeftToRightMatch[i];
+                int rightIndex = mCurrentFrame.=[i];
+                // 只有存在对应右目特征点的才会被构造地图点
                 if(rightIndex != -1){
+                    // ComputeStereoFishEyeMatches根据共视区域里的左右目匹配对计算得到的3D坐标
                     Eigen::Vector3f x3D = mCurrentFrame.mvStereo3Dpoints[i];
 
                     MapPoint* pNewMP = new MapPoint(x3D, pKFini, mpAtlas->GetCurrentMap());

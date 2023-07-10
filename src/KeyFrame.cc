@@ -334,6 +334,9 @@ int KeyFrame::GetNumberMPs()
     return numberMPs;
 }
 
+// Add MapPoint to KeyFrame
+// 通过传入的索引idx将对应的MapPoint赋给mvpMapPoints
+// 建立MapPoint与Frame/KeyFrame之间的双向联系
 void KeyFrame::AddMapPoint(MapPoint *pMP, const size_t &idx)
 {
     unique_lock<mutex> lock(mMutexFeatures);
@@ -1007,7 +1010,7 @@ void KeyFrame::PreSave(set<KeyFrame *> &spKF, set<MapPoint *> &spMP, set<Geometr
 {
     // Save the id of each MapPoint in this KF, there can be null pointer in the vector
     mvBackupMapPointsId.clear();
-    mvBackupMapPointsId.reserve(N);
+    mvBackupMapPointsId.reserve(N);//N: Number of KeyPoints
     for (int i = 0; i < N; ++i)
     {
 

@@ -143,6 +143,7 @@ public:
 
     inline Sophus::SE3<float> GetPose() const {
         //TODO: can the Frame pose be accsessed from several threads? should this be protected somehow?
+        // 获取当前帧位姿
         return mTcw;
     }
 
@@ -166,6 +167,7 @@ public:
 
 private:
     //Sophus/Eigen migration
+    // 当前帧位姿
     Sophus::SE3<float> mTcw;
     Eigen::Matrix<float,3,3> mRwc;
     Eigen::Matrix<float,3,1> mOw;
@@ -199,6 +201,7 @@ public:
     double mTimeStamp;
 
     // Calibration matrix and OpenCV distortion parameters.
+    // 存储在Frame类中的想相机内参
     cv::Mat mK;
     Eigen::Matrix3f mK_;
     static float fx;
@@ -235,6 +238,7 @@ public:
     // 存放当前帧生成的MapPoints
     std::vector<MapPoint*> mvpMapPoints;
     // "Monocular" keypoints have a negative value.
+    // 存放当前帧某个地图点对应右目图像上的横坐标，单目情况该值为-1
     std::vector<float> mvuRight;
     std::vector<float> mvDepth;
 
@@ -250,7 +254,7 @@ public:
     // Flag to identify outlier associations.
     // 长度和mCurrent.mvpMapPoints相同，用于表示某个地图点是不是为Outlier
     // 如果当前地图点是Outlier，就被赋为True，否则就为False
-    // mCurrentFrame.mvbOutliers在Frame的构造函数中被赋了初始值，全为False
+    // mCurrentFrame.mvbOutliers在Frame的构造函数中被赋了初始值，默认全为False
     std::vector<bool> mvbOutlier;
     int mnCloseMPs;
 
@@ -349,6 +353,7 @@ public:
 
     //Triangulated stereo observations using as reference the left camera. These are
     //computed during ComputeStereoFishEyeMatches
+    // 在鱼眼双目模式中通过双目三角化计算得到的左目相机坐标系下的特征点3D坐标
     std::vector<Eigen::Vector3f> mvStereo3Dpoints;
 
     //Grid for the right image

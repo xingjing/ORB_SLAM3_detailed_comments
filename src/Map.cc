@@ -471,6 +471,9 @@ void Map::PreSave(std::set<GeometricCamera *> &spCams)
  */
 void Map::PostLoad(KeyFrameDatabase *pKFDB, ORBVocabulary *pORBVoc /*, map<long unsigned int, KeyFrame*>& mpKeyFrameId*/, map<unsigned int, GeometricCamera *> &mpCams)
 {
+    // std::copy(start, end, std::back_inserter(container));
+    // start和end是输入序列（假设有N个元素）的迭代器（iterator），container是一个容器，该容器的接口包含函数push_back。
+    // 假设container开始是空的，那么copy完毕后它就包含N个元素，并且顺序与原来队列中的元素顺序一样。
     std::copy(mvpBackupMapPoints.begin(), mvpBackupMapPoints.end(), std::inserter(mspMapPoints, mspMapPoints.begin()));
     std::copy(mvpBackupKeyFrames.begin(), mvpBackupKeyFrames.end(), std::inserter(mspKeyFrames, mspKeyFrames.begin()));
 
@@ -481,6 +484,7 @@ void Map::PostLoad(KeyFrameDatabase *pKFDB, ORBVocabulary *pORBVoc /*, map<long 
         if (!pMPi || pMPi->isBad())
             continue;
 
+        // 将当前地图点存入MapPoint的mpMap
         pMPi->UpdateMap(this);
         mpMapPointId[pMPi->mnId] = pMPi;
     }
@@ -492,8 +496,11 @@ void Map::PostLoad(KeyFrameDatabase *pKFDB, ORBVocabulary *pORBVoc /*, map<long 
         if (!pKFi || pKFi->isBad())
             continue;
 
+        // 将当前关键帧的地图点存入KeyFrame的mpMap
         pKFi->UpdateMap(this);
+        // 将当前ORBVocabulary存入KeyFrame的mpORBvocabulary
         pKFi->SetORBVocabulary(pORBVoc);
+        // 将当前关键帧数据库指针存入KeyFrame的mpKeyFrameDB
         pKFi->SetKeyFrameDatabase(pKFDB);
         mpKeyFrameId[pKFi->mnId] = pKFi;
     }
@@ -515,6 +522,7 @@ void Map::PostLoad(KeyFrameDatabase *pKFDB, ORBVocabulary *pORBVoc /*, map<long 
             continue;
 
         pKFi->PostLoad(mpKeyFrameId, mpMapPointId, mpCams);
+        // 根据关键帧的BoW，更新数据库的倒排索引
         pKFDB->add(pKFi);
     }
 

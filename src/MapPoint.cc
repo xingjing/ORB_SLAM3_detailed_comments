@@ -170,17 +170,22 @@ KeyFrame* MapPoint::GetReferenceKeyFrame()
  * 并增加观测的相机数目nObs，单目+1，双目或者rgbd+2
  * 这个函数是建立关键帧共视关系的核心函数，能共同观测到某些地图点的关键帧是共视关键帧
  * @param pKF KeyFrame
- * @param idx MapPoint在KeyFrame中的索引
+ * @param idx MapPoint在KeyFrame中的索引(也就是MapPoint所对应特征点在KeyFrame中的索引)
  */
+// 建立MapPoint与Frame/KeyFrame之间的双向联系
 void MapPoint::AddObservation(KeyFrame* pKF, int idx)
 {
     unique_lock<mutex> lock(mMutexFeatures);
     tuple<int,int> indexes;
 
+    // mObservations：键指的是观测到该地图点的关键帧ID，
+    // 而值指的是该地图点在该关键帧中对应的特征的索引ID（考虑到双目的情况，所以索引也是tuple）
     if(mObservations.count(pKF)){
+        // 现有观测中已有当前关键帧，不做修改
         indexes = mObservations[pKF];
     }
     else{
+        // 现有观测中没有当前帧，初始化indexes
         indexes = tuple<int,int>(-1,-1);
     }
 

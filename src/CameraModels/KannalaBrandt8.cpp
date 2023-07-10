@@ -478,10 +478,12 @@ float KannalaBrandt8::TriangulateMatches(
     Tcw2 << R21, -R21 * t12;
 
     // 4. 三角化
+    // 通过三角化恢复归一化坐标的三维点坐标，该三维点为在左相机坐标系下的点
     Triangulate(p11, p22, Tcw1, Tcw2, x3D);
     // cv::Mat x3Dt = x3D.t();
 
     // 深度值是否正常
+    // 从三角化的三维坐标中取出深度值z
     float z1 = x3D(2);
     if (z1 <= 0)
     {

@@ -1551,7 +1551,7 @@ static void computeDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Ma
  * @param[in] _image                    输入原始图的图像
  * @param[in] _mask                     掩膜mask
  * @param[in & out] _keypoints                存储特征点关键点的向量
- * @param[in & out] _descriptors              存储特征点描述子的矩阵
+ * @param[in & out] _descriptors              存储特征点描述子的矩阵（整个金字塔）
  */
     int ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
                                   OutputArray _descriptors, std::vector<int> &vLappingArea)
@@ -1663,20 +1663,40 @@ static void computeDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Ma
                     keypoint->pt *= scale;
                 }
                 // ?TODO vLappingArea 
+                // pinhole单目模式的vLappingArea[1]=1000
+                // fisheye双目模式的vLappingArea来自yaml文件的Camera.overlappingBegin，TUM-VI.yaml默认取整个图像width
+                //在_keypoints与descriptors的前monoIndex个元素中放的是非共视区域的特征点信息
+                //在_keypoints与descriptors的monoIndex个元素之后存放的是共视区域内的特征点信息
+                // 由于只支持平行双目，因此只考虑共视区域的x坐标
                 if(keypoint->pt.x >= vLappingArea[0] && keypoint->pt.x <= vLappingArea[1]){
+                    // 对于在vLappingArea范围内的特征点
+                    //stereoIndex = nkeypoints-1，nkeypoints整个金字塔内的特征点个数
+                    // 从_keypoints最后一个元素开始将keypoints的地址赋给_keypoints
                     _keypoints.at(stereoIndex) = (*keypoint);
+                    //将desc第i行描述子信息复制到descriptors第stereoIndex行
                     desc.row(i).copyTo(descriptors.row(stereoIndex));
+                    //stereoIndex递减
                     stereoIndex--;
                 }
                 else{
+                    // pinhole双目模式的vLappingArea=0，因此全部进入以下分支
+                    // 对于在vLappingArea范围之外的特征点，也就是处于非共视区域的特征点
+                    //monoIndex = 0
+                    //从_keypoints第一个元素开始将keypoints的地址赋给_keypoints
                     _keypoints.at(monoIndex) = (*keypoint);
+                    //将desc第i行描述子信息复制到descriptors第monoIndex行
                     desc.row(i).copyTo(descriptors.row(monoIndex));
+                    // monoIndex递增
                     monoIndex++;
                 }
                 i++;
             }
         }
         //cout << "[ORBextractor]: extracted " << _keypoints.size() << " KeyPoints" << endl;
+        // 返回monoIndex的含义：
+        // 1、鱼眼双目非共视区域的特征点个数
+        // 2、Pinhole双目所有特征点个数
+        // 3、Pinhole单目（fisheye单目）所有x坐标在[0, 1000]之外的特征点个数
         return monoIndex;
     }
 	/**
