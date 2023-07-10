@@ -46,6 +46,7 @@ cv::Mat FrameDrawer::DrawFrame(float imageScale)
     vector<float> vCurrentDepth;
     float thDepth;
 
+    // 此处为和ORB-SLAM2相比，新增的内容
     Frame currentFrame;
     vector<MapPoint*> vpLocalMap;
     vector<cv::KeyPoint> vMatchesKeys;
@@ -61,12 +62,15 @@ cv::Mat FrameDrawer::DrawFrame(float imageScale)
     cv::Scalar odometryColor(255,0,0);
 
     //Copy variables within scoped mutex
+    // step 1：将成员变量赋值给局部变量（包括图像、状态、其它的提示）
+    //NOTICE 加互斥锁，避免与FrameDrawer::Update函数中图像拷贝发生冲突
     {
         unique_lock<mutex> lock(mMutex);
         state=mState;
         if(mState==Tracking::SYSTEM_NOT_READY)
             mState=Tracking::NO_IMAGES_YET;
 
+        //NOTICE 这里使用copyTo进行深拷贝是因为后面会把单通道灰度图像转为3通道图像
         mIm.copyTo(im);
 
         if(mState==Tracking::NOT_INITIALIZED)
@@ -74,6 +78,7 @@ cv::Mat FrameDrawer::DrawFrame(float imageScale)
             vCurrentKeys = mvCurrentKeys;
             vIniKeys = mvIniKeys;
             vMatches = mvIniMatches;
+            // 相比于ORB-SLAM2新增项
             vTracks = mvTracks;
         }
         else if(mState==Tracking::OK)
@@ -82,8 +87,9 @@ cv::Mat FrameDrawer::DrawFrame(float imageScale)
             vbVO = mvbVO;
             vbMap = mvbMap;
 
+            // 相比于ORB-SLAM2新增项
             currentFrame = mCurrentFrame;
-            vpLocalMap = mvpLocalMap;
+            vpLocalMap = mvpLocalMap;//未实际使用
             vMatchesKeys = mvMatchedKeys;
             vpMatchedMPs = mvpMatchedMPs;
             vOutlierKeys = mvOutlierKeys;
@@ -99,7 +105,7 @@ cv::Mat FrameDrawer::DrawFrame(float imageScale)
         {
             vCurrentKeys = mvCurrentKeys;
         }
-    }
+    }// destroy scoped mutex -> release mutex
 
     if(imageScale != 1.f)
     {
@@ -112,10 +118,14 @@ cv::Mat FrameDrawer::DrawFrame(float imageScale)
         cvtColor(im,im,cv::COLOR_GRAY2BGR);
 
     //Draw
+    // step 2：绘制初始化轨迹连线，绘制特征点边框（特征点用小框圈住）
+    // step 2.1：初始化时，当前帧的特征坐标与初始帧的特征点坐标连成线，形成轨迹
     if(state==Tracking::NOT_INITIALIZED)
     {
         for(unsigned int i=0; i<vMatches.size(); i++)
         {
+            //绘制当前帧特征点到下一帧特征点的连线,其实就是匹配关系
+            //NOTICE 就是当初看到的初始化过程中图像中显示的绿线
             if(vMatches[i]>=0)
             {
                 cv::Point2f pt1,pt2;
@@ -129,7 +139,7 @@ cv::Mat FrameDrawer::DrawFrame(float imageScale)
                     pt1 = vIniKeys[i].pt;
                     pt2 = vCurrentKeys[vMatches[i]].pt;
                 }
-                cv::line(im,pt1,pt2,standardColor);
+                cv::line(im,pt1,pt2,standardColor);//绿色线条
             }
         }
         for(vector<pair<cv::Point2f, cv::Point2f> >::iterator it=vTracks.begin(); it!=vTracks.end(); it++)
@@ -181,10 +191,11 @@ cv::Mat FrameDrawer::DrawFrame(float imageScale)
                 }
 
                 // This is a match to a MapPoint in the map
+                // step2.2：正常跟踪时，在画布im中标注特征点
                 if(vbMap[i])
                 {
                     cv::rectangle(im,pt1,pt2,standardColor);
-                    cv::circle(im,point,2,standardColor,-1);
+                    cv::circle(im,point,2,standardColor,-1);//绿色
                     mnTracked++;
                 }
                 else // This is match to a "visual odometry" MapPoint created in the last frame
@@ -198,6 +209,7 @@ cv::Mat FrameDrawer::DrawFrame(float imageScale)
         }
     }
 
+    //然后写入状态栏的信息
     cv::Mat imWithInfo;
     DrawTextInfo(im,state, imWithInfo);
 
@@ -330,7 +342,7 @@ cv::Mat FrameDrawer::DrawRightFrame(float imageScale)
 }
 
 
-
+//绘制状态栏上的文本信息
 void FrameDrawer::DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText)
 {
     stringstream s;
@@ -370,14 +382,18 @@ void FrameDrawer::DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText)
 
 }
 
+//将跟踪线程的数据拷贝到绘图线程（图像、特征点、地图、跟踪状态）
 void FrameDrawer::Update(Tracking *pTracker)
 {
     unique_lock<mutex> lock(mMutex);
+    //拷贝跟踪线程的图像
     pTracker->mImGray.copyTo(mIm);
+    //拷贝跟踪线程的特征点
     mvCurrentKeys=pTracker->mCurrentFrame.mvKeys;
     mThDepth = pTracker->mCurrentFrame.mThDepth;
     mvCurrentDepth = pTracker->mCurrentFrame.mvDepth;
 
+    // 右目图像
     if(both){
         mvCurrentKeysRight = pTracker->mCurrentFrame.mvKeysRight;
         pTracker->mImRight.copyTo(mImRight);
@@ -408,11 +424,13 @@ void FrameDrawer::Update(Tracking *pTracker)
 
     if(pTracker->mLastProcessedState==Tracking::NOT_INITIALIZED)
     {
+        //获取初始化帧的特征点和匹配信息
         mvIniKeys=pTracker->mInitialFrame.mvKeys;
         mvIniMatches=pTracker->mvIniMatches;
     }
     else if(pTracker->mLastProcessedState==Tracking::OK)
     {
+        //获取当前帧地图点的信息
         for(int i=0;i<N;i++)
         {
             MapPoint* pMP = pTracker->mCurrentFrame.mvpMapPoints[i];
@@ -421,6 +439,7 @@ void FrameDrawer::Update(Tracking *pTracker)
                 if(!pTracker->mCurrentFrame.mvbOutlier[i])
                 {
                     if(pMP->Observations()>0)
+                    //该mappoints可以被多帧观测到，则为有效的地图点
                         mvbMap[i]=true;
                     else
                         mvbVO[i]=true;
@@ -436,6 +455,7 @@ void FrameDrawer::Update(Tracking *pTracker)
         }
 
     }
+    //更新追踪线程的跟踪状态
     mState=static_cast<int>(pTracker->mLastProcessedState);
 }
 

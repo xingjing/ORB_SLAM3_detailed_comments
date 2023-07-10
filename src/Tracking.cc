@@ -2673,11 +2673,11 @@ void Tracking::Track()
     //                \                           \---重定位失败---LOST（传不到这里，因为直接return了）
     //                 \--上一帧跟踪失败(LOST)--LOST（传不到这里，因为直接return了）
     // last.记录位姿信息，用于轨迹复现
-    // Step 11 记录位姿信息，用于最后保存所有的轨迹
+    //Step 11 记录位姿信息，用于最后保存所有的轨迹
     if(mState==OK || mState==RECENTLY_LOST)
     {
         // Store frame pose information to retrieve the complete camera trajectory afterwards.
-        // Step 11：记录位姿信息，用于最后保存所有的轨迹
+        //Step 11：记录位姿信息，用于最后保存所有的轨迹
         if(mCurrentFrame.isSet())
         {
             // 计算相对姿态Tcr = Tcw * Twr, Twr = Trw^-1
@@ -3304,7 +3304,7 @@ bool Tracking::TrackReferenceKeyFrame()
 void Tracking::UpdateLastFrame()
 {
     // Update pose according to reference keyframe
-    // Step 1：利用参考关键帧更新上一帧在世界坐标系下的位姿
+    //Step 1：利用参考关键帧更新上一帧在世界坐标系下的位姿
     // 上一普通帧的参考关键帧，注意这里用的是参考关键帧（位姿准）而不是上上一帧的普通帧
     KeyFrame* pRef = mLastFrame.mpReferenceKF;
     // ref_keyframe 到 lastframe的位姿变换
@@ -3318,11 +3318,11 @@ void Tracking::UpdateLastFrame()
     if(mnLastKeyFrameId==mLastFrame.mnId || mSensor==System::MONOCULAR || mSensor==System::IMU_MONOCULAR || !mbOnlyTracking)
         return;
 
-    // Step 2：对于双目或rgbd相机，为上一帧生成新的临时地图点
+    //Step 2：对于双目或rgbd相机，为上一帧生成新的临时地图点
     // 注意这些地图点只是用来跟踪，不加入到地图中，跟踪完后会删除
     // Create "visual odometry" MapPoints
     // We sort points according to their measured depth by the stereo/RGB-D sensor
-    // Step 2.1：得到上一帧中具有有效深度值的特征点（不一定是地图点）
+    //Step 2.1：得到上一帧中具有有效深度值的特征点（不一定是地图点）
     vector<pair<float,int> > vDepthIdx;
     const int Nfeat = mLastFrame.Nleft == -1? mLastFrame.N : mLastFrame.Nleft;
     vDepthIdx.reserve(Nfeat);
@@ -3344,7 +3344,7 @@ void Tracking::UpdateLastFrame()
 
     // We insert all close points (depth<mThDepth)
     // If less than 100 close points, we insert the 100 closest ones.
-    // Step 2.2：从中找出不是地图点的部分
+    //Step 2.2：从中找出不是地图点的部分
     int nPoints = 0;
     for(size_t j=0; j<vDepthIdx.size();j++)
     {
@@ -3363,7 +3363,7 @@ void Tracking::UpdateLastFrame()
 
         if(bCreateNew)
         {
-            // Step 2.3：需要创建的点，包装为地图点。只是为了提高双目和RGBD的跟踪成功率，并没有添加复杂属性，因为后面会扔掉
+            //Step 2.3：需要创建的点，包装为地图点。只是为了提高双目和RGBD的跟踪成功率，并没有添加复杂属性，因为后面会扔掉
             // 反投影到世界坐标系中
             Eigen::Vector3f x3D;
 
@@ -3388,7 +3388,7 @@ void Tracking::UpdateLastFrame()
             nPoints++;
         }
 
-        // Step 2.4：如果地图点质量不好，停止创建地图点
+        //Step 2.4：如果地图点质量不好，停止创建地图点
         // 停止新增临时地图点必须同时满足以下条件：
         // 1、当前的点的深度已经超过了设定的深度阈值（35倍基线）
         // 2、nPoints已经超过100个点，说明距离比较远了，可能不准确，停掉退出
@@ -3541,9 +3541,9 @@ bool Tracking::TrackLocalMap()
     // We retrieve the local map and try to find matches to points in the local map.
     mTrackedFr++;
 
-    // Step 1：更新局部关键帧 mvpLocalKeyFrames 和局部地图点 mvpLocalMapPoints
+    //Step 1：更新局部关键帧 mvpLocalKeyFrames 和局部地图点 mvpLocalMapPoints
     UpdateLocalMap();
-    // Step 2：筛选局部地图中新增的在视野范围内的地图点，投影到当前帧搜索匹配，得到更多的匹配关系
+    //Step 2：筛选局部地图中新增的在视野范围内的地图点，投影到当前帧搜索匹配，得到更多的匹配关系
     // 将局部地图点投影到当前帧，去掉不在视野内的无效的地图点，剩下的局部地图点投影到当前帧进行匹配(SearchByProjection()函数)
     SearchLocalPoints();
 
@@ -3559,7 +3559,7 @@ bool Tracking::TrackLocalMap()
         }
 
     // 在这个函数之前，在 Relocalization、TrackReferenceKeyFrame、TrackWithMotionModel 中都有位姿优化
-    // Step 3：前面新增了更多的匹配关系，BA优化得到更准确的位姿
+    //Step 3：前面新增了更多的匹配关系，BA优化得到更准确的位姿
     int inliers;
     // IMU未初始化，仅优化位姿
     if (!mpAtlas->isImuInitialized())
@@ -4044,7 +4044,7 @@ void Tracking::CreateNewKeyFrame()
 void Tracking::SearchLocalPoints()
 {
     // Do not search map points already matched
-    // Step 1：遍历当前帧的地图点，标记这些地图点不参与之后的投影搜索匹配
+    //Step 1：遍历当前帧的地图点，标记这些地图点不参与之后的投影搜索匹配
         for(vector<MapPoint*>::iterator vit=mCurrentFrame.mvpMapPoints.begin(), vend=mCurrentFrame.mvpMapPoints.end(); vit!=vend; vit++)
     {
         MapPoint* pMP = *vit;
@@ -4156,12 +4156,12 @@ void Tracking::UpdateLocalMap()
  */
 void Tracking::UpdateLocalPoints()
 {
-    // Step 1：清空局部地图点
+    //Step 1：清空局部地图点
     mvpLocalMapPoints.clear();
 
     int count_pts = 0;
 
-    // Step 2：遍历局部关键帧列表 mvpLocalKeyFrames
+    //Step 2：遍历局部关键帧列表 mvpLocalKeyFrames
     for(vector<KeyFrame*>::const_reverse_iterator itKF=mvpLocalKeyFrames.rbegin(), itEndKF=mvpLocalKeyFrames.rend(); itKF!=itEndKF; ++itKF)
     {
         // 对于每一个关键帧，都调用GetMapPointMatches()成员函数，获取匹配的地图点

@@ -134,6 +134,7 @@ bool MapDrawer::ParseViewerParamFile(cv::FileStorage &fSettings)
 
 void MapDrawer::DrawMapPoints()
 {
+    //取出所有的地图点
     Map* pActiveMap = mpAtlas->GetCurrentMap();
     if(!pActiveMap)
         return;

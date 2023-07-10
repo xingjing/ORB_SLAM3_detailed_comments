@@ -49,7 +49,7 @@ namespace ORB_SLAM3
         // 如果 th！=1 (RGBD 相机或者刚刚进行过重定位), 需要扩大范围搜索
         const bool bFactor = th!=1.0;
 
-        // Step 1 遍历有效的局部地图点
+        //Step 1 遍历有效的局部地图点
         for(size_t iMP=0; iMP<vpMapPoints.size(); iMP++)
         {
             MapPoint* pMP = vpMapPoints[iMP];
@@ -68,14 +68,14 @@ namespace ORB_SLAM3
                 const int &nPredictedLevel = pMP->mnTrackScaleLevel;
 
                 // The size of the window will depend on the viewing direction
-                // Step 2 设定搜索搜索窗口的大小。取决于视角, 若当前视角和平均视角夹角较小时, r取一个较小的值
+                //Step 2 设定搜索搜索窗口的大小。取决于视角, 若当前视角和平均视角夹角较小时, r取一个较小的值
                 float r = RadiusByViewingCos(pMP->mTrackViewCos);
 
                 // 如果需要扩大范围搜索，则乘以阈值th
                 if(bFactor)
                     r*=th;
 
-                // Step 3 通过投影点以及搜索窗口和预测的尺度进行搜索, 找出搜索半径内的候选匹配点索引
+                //Step 3 通过投影点以及搜索窗口和预测的尺度进行搜索, 找出搜索半径内的候选匹配点索引
                 const vector<size_t> vIndices =
                         F.GetFeaturesInArea(pMP->mTrackProjX,pMP->mTrackProjY,      // 该地图点投影到一帧上的坐标
                                             r*F.mvScaleFactors[nPredictedLevel],    // 认为搜索窗口的大小和该特征点被追踪到时所处的尺度也有关系
@@ -93,7 +93,7 @@ namespace ORB_SLAM3
                     int bestIdx =-1 ;
 
                     // Get best and second matches with near keypoints
-                    // Step 4 寻找候选匹配点中的最佳和次佳匹配点
+                    //Step 4 寻找候选匹配点中的最佳和次佳匹配点
                     for(vector<size_t>::const_iterator vit=vIndices.begin(), vend=vIndices.end(); vit!=vend; vit++)
                     {
                         const size_t idx = *vit;
